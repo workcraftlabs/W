@@ -1,5 +1,6 @@
 import Foundation
 import WCore
+import Security
 
 @main struct Checks {
     static func main() throws {
@@ -38,6 +39,35 @@ import WCore
         rejects("Wrong ID token nonce") { try ChatGPTProtocol.validateClaims(claims, client: "client", nonce: "other", subject: "user") }
         rejects("Wrong returning identity") { try ChatGPTProtocol.validateClaims(claims, client: "client", nonce: "nonce", subject: "other") }
         rejects("Forged JWT rejected") { _ = try ChatGPTProtocol.verifyJWT("e30.e30.AA", keys: [], client: "client", nonce: nil, subject: nil) }
+        var expired = claims; expired["exp"] = Date().addingTimeInterval(-1).timeIntervalSince1970
+        rejects("Expired ID token") { try ChatGPTProtocol.validateClaims(expired, client: "client", nonce: "nonce", subject: "user") }
+        var extended = WorkSession(task: tasks[0], now: t)
+        extended.extend(minutes: 15, at: t.addingTimeInterval(1500))
+        check(extended.checkInAt == 2400, "Extension starts from current elapsed time")
+        state.pending = [PendingUpdate(pageID: "1", status: "In progress", start: t, settings: NotionSettings()), PendingUpdate(pageID: "1", status: "Done", settings: NotionSettings())]
+        let queue = try JSONDecoder().decode(SavedState.self, from: JSONEncoder().encode(state)).pending
+        check(queue.map(\.status) == ["In progress", "Done"] && queue[0].start == t, "Pending sync order survives restart")
+        let key = SecKeyCreateRandomKey([kSecAttrKeyType: kSecAttrKeyTypeRSA, kSecAttrKeySizeInBits: 2048] as CFDictionary, nil)!
+        let publicKey = SecKeyCopyPublicKey(key)!
+        let der = SecKeyCopyExternalRepresentation(publicKey, nil)! as Data
+        let bytes = Array(der); var offset = 0
+        func readTLV(_ expected: UInt8) -> Data {
+            precondition(bytes[offset] == expected); offset += 1
+            var length = Int(bytes[offset]); offset += 1
+            if length >= 128 { let size = length & 127; length = 0; for _ in 0..<size { length = length * 256 + Int(bytes[offset]); offset += 1 } }
+            let data = Data(bytes[offset..<offset + length]); if expected != 0x30 { offset += length }; return data
+        }
+        _ = readTLV(0x30)
+        let modulus = readTLV(0x02), exponent = readTLV(0x02)
+        let header = ChatGPTProtocol.base64URL(try JSONSerialization.data(withJSONObject: ["alg": "RS256", "kid": "test-key"]))
+        let payload = ChatGPTProtocol.base64URL(try JSONSerialization.data(withJSONObject: claims))
+        let signed = header + "." + payload
+        let signature = SecKeyCreateSignature(key, .rsaSignatureMessagePKCS1v15SHA256, Data(signed.utf8) as CFData, nil)! as Data
+        let jwt = signed + "." + ChatGPTProtocol.base64URL(signature)
+        let keys: [[String: Any]] = [["kid": "test-key", "kty": "RSA", "n": ChatGPTProtocol.base64URL(modulus), "e": ChatGPTProtocol.base64URL(exponent)]]
+        let verified = try ChatGPTProtocol.verifyJWT(jwt, keys: keys, client: "client", nonce: "nonce", subject: "user")
+        check(verified["sub"] as? String == "user", "Real RSA signature verifies against JWKS")
+        rejects("Tampered JWT signature") { _ = try ChatGPTProtocol.verifyJWT(signed + "." + ChatGPTProtocol.base64URL(Data(repeating: 0, count: signature.count)), keys: keys, client: "client", nonce: "nonce", subject: "user") }
         print("\(count) checks passed.")
     }
 }
