@@ -62,3 +62,7 @@ Vercel hosts the website, not the native Mac executable. Import this repository 
 - Improve onboarding with property pickers and public OAuth (requires a secure token-exchange service), configurable hotkeys, and explicit sync-conflict resolution.
 
 No shared integration secret belongs in a distributed desktop binary. Contributors should use their own test integration and never commit tokens, local state, or private task fixtures.
+
+### CI setup
+
+The workflow template is at `scripts/ci.yml.example`. Move it to `.github/workflows/ci.yml` to enable macOS build/test artifacts. The initial publishing credential lacks GitHub's `workflow` scope, so automatic CI is not enabled yet.
