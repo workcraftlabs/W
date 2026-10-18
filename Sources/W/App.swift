@@ -1,6 +1,7 @@
 import SwiftUI
 import AppKit
 import Carbon
+import CoreText
 import UserNotifications
 
 @main struct WApp: App {
@@ -15,6 +16,8 @@ final class IslandPanel: NSPanel { override var canBecomeKey: Bool { true }; ove
     var hotKey: EventHotKeyRef?
     var handler: EventHandlerRef?
     func applicationDidFinishLaunching(_ notification: Notification) {
+        let fontBundle = Bundle.main.url(forResource: "W_W", withExtension: "bundle").flatMap { Bundle(url: $0) } ?? Bundle.module
+        if let font = fontBundle.url(forResource: "Inter", withExtension: "ttf") { CTFontManagerRegisterFontsForURL(font as CFURL, .process, nil) }
         NSApp.setActivationPolicy(.accessory)
         panel = IslandPanel(contentRect: NSRect(x: 0, y: 0, width: 440, height: 570), styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         panel.level = .floating; panel.isOpaque = false; panel.backgroundColor = .clear

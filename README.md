@@ -2,17 +2,17 @@
 
 A little space to focus. A native, open-source macOS menu-bar app that connects what you're working on to your Notion tasks.
 
-**Early developer preview.** No AI account or paid model API required. macOS 14+, Swift 6 toolchain. Source is MIT licensed.
+**Early developer preview.** No AI account required for local matching. Optional Sign in with ChatGPT uses your eligible ChatGPT plan; no API key required. macOS 14+, Swift 6 toolchain. Source is MIT licensed.
 
 ## Run
 
 ```sh
-swift test
+swift run WChecks
 ./scripts/build-app.sh
 open dist/W.app
 ```
 
-Use the app bundle rather than `swift run` for microphone permissions and notifications. The build script uses an ad-hoc signature by default. It builds for your Mac's architecture. Distribution to other people still requires Developer ID signing and Apple notarization; CI artifacts are development builds, not notarized releases.
+Use the app bundle rather than `swift run` for microphone permissions and notifications. The build script uses an ad-hoc signature by default. It builds for your Mac's architecture. Distribution to other people still requires Developer ID signing and Apple notarization; Any CI artifacts are development builds, not notarized releases.
 
 Press **Shift–Command–W** or click **W** in the menu bar. Type or dictate, select a match, and start. Drag the panel anywhere or use its dock button to return it to the top of the current display. Escape hides it. The first preview uses a fixed shortcut.
 
@@ -28,7 +28,7 @@ Notion API version: `2025-09-03`. One task data source and one optional project 
 
 ## What works
 
-- Native floating, dark panel and system-wide shortcut.
+- Native floating panel following system light/dark mode, with Inter typography and system-wide shortcut.
 - On-device speech transcription when supported by your language/device; typing always works. W does not fall back silently to cloud audio processing.
 - Local keyword/fuzzy matching across titles and project names. Completed tasks are excluded. Every match requires selection; unmatched input never creates a task automatically.
 - Explicit task creation with an editable title and optional chosen project. Without Notion configured, tasks stay local.
@@ -38,7 +38,7 @@ Notion API version: `2025-09-03`. One task data source and one optional project 
 
 ## Data and behavior
 
-State lives at `~/Library/Application Support/W/state.json`. It includes cached task/project names, session timestamps, and pending updates. It is local, unencrypted app data protected by your macOS account. No analytics or hosted backend. Notion credentials go only to the Notion API. Task matching never sends data to an LLM.
+State lives at `~/Library/Application Support/W/state.json`. It includes cached task/project names, session timestamps, and pending updates. It is local, unencrypted app data protected by your macOS account. No analytics or hosted backend. Notion credentials go only to the Notion API. Local task matching sends nothing to an LLM. Optional **Find with ChatGPT** sends your typed/transcribed request plus up to 80 task titles/project names and 80 project names/IDs to OpenAI, only on explicit request. It uses your ChatGPT plan and requires consent during browser sign-in.
 
 One task can have multiple sessions. Done completes the Notion task; Stop for now ends the session without completing it. Pausing does not change the task's Notion status. The optional Notion start-date field records the latest session start. Full session history and elapsed totals currently remain local; a separate Notion sessions database is not implemented.
 
@@ -66,3 +66,11 @@ No shared integration secret belongs in a distributed desktop binary. Contributo
 ### CI setup
 
 The workflow template is at `scripts/ci.yml.example`. Move it to `.github/workflows/ci.yml` to enable macOS build/test artifacts. The initial publishing credential lacks GitHub's `workflow` scope, so automatic CI is not enabled yet.
+
+## Optional Sign in with ChatGPT
+
+Open Settings → **Continue with ChatGPT**. W opens OpenAI authorization in your system browser. Approve plan usage, return to W, and choose an available model. On the task screen, **Find with ChatGPT** asks for a task match or new-task suggestion. Select the match or review creation before any Notion change.
+
+W supports multiple saved account/workspace registrations, account switching, reauthorization, token renewal, and sign-out with attempted remote revocation. OAuth tokens are stored in Keychain. It uses PKCE, fresh state/nonce, a stable per-install host ID, signature-verified OIDC identity, and the issued client ID. It never reads another app's credentials. AI cannot call tools or write to Notion. Invalid IDs, incomplete streams, and usage failures fall back to local matching. Manage plan limits at https://chatgpt.com/settings/usage.
+
+This is the official open-source/local-app sign-in flow, subject to account eligibility and current preview limits. Actual account authorization and live inference require the person using W to complete browser consent; they are not covered by offline automated checks. ChatGPT history and existing connectors are not imported. Vercel remains the static website host, with no OpenAI tokens on the website.

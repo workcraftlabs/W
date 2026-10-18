@@ -18,7 +18,7 @@ public enum Matcher {
     }
     public static func ranked(_ query: String, tasks: [WorkTask]) -> [(task: WorkTask, score: Double)] {
         let q = Set(tokens(query)); guard !q.isEmpty else { return [] }
-        return tasks.filter { !$0.done }.compactMap { task in
+        let results: [(task: WorkTask, score: Double)] = tasks.filter { !$0.done }.compactMap { task -> (task: WorkTask, score: Double)? in
             let title = Set(tokens(task.title)), project = Set(tokens(task.project))
             func matches(_ word: String, in words: Set<String>) -> Bool {
                 words.contains { candidate in candidate == word || (word.count >= 4 && candidate.count >= 4 && distance(word, candidate) <= 1) }
@@ -28,6 +28,7 @@ public enum Matcher {
             let titleHits = q.filter { matches($0, in: title) }.count
             let score = Double(hits) / Double(q.count) * 0.75 + Double(titleHits) / Double(max(title.count, 1)) * 0.25
             return (task, score)
-        }.sorted { $0.score == $1.score ? $0.task.title < $1.task.title : $0.score > $1.score }.prefix(5).map { $0 }
+        }
+        return Array(results.sorted { $0.score == $1.score ? $0.task.title < $1.task.title : $0.score > $1.score }.prefix(5))
     }
 }

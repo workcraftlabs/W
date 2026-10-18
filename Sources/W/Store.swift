@@ -14,6 +14,7 @@ import UserNotifications
     @Published var checkIn = false
     @Published var compact = false
     @Published var token = ""
+    let chat = ChatGPT()
     var file: URL
     var timer: Timer?
     var persistenceOK = true

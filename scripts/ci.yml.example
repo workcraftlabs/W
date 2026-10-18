@@ -8,7 +8,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Test
-        run: swift test
+        run: swift run WChecks
       - name: Build app
         run: ./scripts/build-app.sh
       - name: Archive development build
