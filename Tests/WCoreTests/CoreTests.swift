@@ -77,6 +77,7 @@ import Security
         count += try TaskPropertyChecks.run()
         count += try CreationFieldChecks.run()
         count += try AssigneeChecks.run()
+        count += try VerificationChecks.run()
         print("\(count) checks passed.")
     }
 }

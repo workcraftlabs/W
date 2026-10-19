@@ -25,14 +25,21 @@ public struct NotionClient {
         }
         return json
     }
+    public func discover(_ settings: NotionSettings) async throws -> NotionSchema {
+        let schema = try await request("data_sources/\(settings.taskSource)")
+        return try NotionSchema(properties: schema["properties"] as? [String: [String: Any]] ?? [:], settings: settings)
+    }
     public func validate(_ settings: NotionSettings) async throws {
         let schema = try await request("data_sources/\(settings.taskSource)")
         let props = schema["properties"] as? [String: [String: Any]] ?? [:]
-        guard props[settings.titleProperty]?["type"] as? String == "title" else { throw NotionError("Title property must be a Notion title field.") }
+        guard props[settings.titleProperty]?["type"] as? String == "title" else {
+            let titles = props.filter { $0.value["type"] as? String == "title" }.keys.sorted().joined(separator: ", ")
+            throw NotionError("Title field ‘\(settings.titleProperty)’ does not match this database. Set Title field to: \(titles).")
+        }
         guard props[settings.statusProperty]?["type"] as? String == settings.statusType else { throw NotionError("Status field type does not match Settings.") }
         let status = props[settings.statusProperty]?[settings.statusType] as? [String: Any]
         let names = (status?["options"] as? [[String: Any]] ?? []).compactMap { $0["name"] as? String }
-        guard names.contains(settings.inProgress), names.contains(settings.done) else { throw NotionError("In-progress and done values must exactly match existing Notion options.") }
+        guard names.contains(settings.inProgress), names.contains(settings.done) else { throw NotionError("Status values are case-sensitive. Set In-progress and Done to exact options from: \(names.joined(separator: ", ")).") }
         if !settings.startProperty.isEmpty, props[settings.startProperty]?["type"] as? String != "date" { throw NotionError("Start time property must be a date field.") }
         if !settings.projectSource.isEmpty {
             guard props[settings.projectProperty]?["type"] as? String == "relation" else { throw NotionError("Project property must be a relation.") }

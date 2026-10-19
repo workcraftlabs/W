@@ -82,7 +82,7 @@ struct IslandView: View {
             if !store.message.isEmpty { Text(store.message).font(.custom("Inter", size: 11)).foregroundStyle(.secondary).lineLimit(3).textSelection(.enabled) }
             HStack {
                 Circle().fill(store.state.pending.isEmpty ? accent : Color.secondary).frame(width: 5, height: 5)
-                Text(store.state.pending.isEmpty ? (store.state.settings.taskSource.isEmpty ? "LOCAL MODE" : "NOTION CONFIGURED") : "\(store.state.pending.count) UPDATES PENDING").font(.custom("Inter", size: 9)).tracking(1)
+                Text(store.state.pending.isEmpty ? (store.state.settings.taskSource.isEmpty ? "LOCAL MODE" : store.notionStatusLabel) : "\(store.state.pending.count) UPDATES PENDING").font(.custom("Inter", size: 9)).tracking(1)
                 Spacer()
                 if !store.state.pending.isEmpty { Button("Retry") { Task { await store.flush() } }.buttonStyle(.plain).disabled(store.syncing) }
                 Text("⌃⌥W").font(.custom("Inter", size: 11))
@@ -127,18 +127,63 @@ struct SettingsView: View {
                 Divider()
                 ChatSettingsView(chat: store.chat)
                 Divider()
-                Text("Notion").font(.custom("Inter", size: 13)).fontWeight(.semibold)
+                HStack {
+                    Text("Notion").font(.custom("Inter", size: 13)).fontWeight(.semibold)
+                    Spacer()
+                    NotionConnectionIndicator(store: store)
+                }
                 Text("Connect an internal Notion integration with access to your task and project databases. Tokens stay in macOS Keychain.").font(.custom("Inter", size: 11)).foregroundStyle(.secondary)
                 SecureField("Notion integration token", text: $store.token)
-                field("Tasks data source ID", text: $store.state.settings.taskSource)
-                field("Projects data source ID (optional)", text: $store.state.settings.projectSource)
-                HStack { field("Title field", text: $store.state.settings.titleProperty); field("Status field", text: $store.state.settings.statusProperty) }
-                Picker("Status type", selection: $store.state.settings.statusType) { Text("Status").tag("status"); Text("Select").tag("select") }
-                HStack { field("In-progress value", text: $store.state.settings.inProgress); field("Done value", text: $store.state.settings.done) }
-                field("Project relation field", text: $store.state.settings.projectProperty)
-                field("Start date field (optional)", text: $store.state.settings.startProperty)
+                HStack {
+                    field("Tasks data source ID", text: $store.state.settings.taskSource)
+                    NotionConnectionIndicator(store: store)
+                }
+                HStack {
+                    field("Projects data source ID (optional)", text: $store.state.settings.projectSource)
+                    if !store.state.settings.projectSource.isEmpty { NotionConnectionIndicator(store: store) }
+                }
+                if let schema = store.notionSchema {
+                    Picker("Title field", selection: $store.state.settings.titleProperty) {
+                        ForEach(schema.titles, id: \.self) { Text($0).tag($0) }
+                    }
+                    Picker("Status field", selection: $store.state.settings.statusProperty) {
+                        ForEach(schema.statusFields.keys.sorted(), id: \.self) { Text($0).tag($0) }
+                    }.onChange(of: store.state.settings.statusProperty) { _, name in
+                        store.state.settings.statusType = schema.statusTypes[name] ?? "status"
+                    }
+                    statusPicker("In progress", selection: $store.state.settings.inProgress, options: schema.statusFields[store.state.settings.statusProperty] ?? [])
+                    statusPicker("Done", selection: $store.state.settings.done, options: schema.statusFields[store.state.settings.statusProperty] ?? [])
+                    Picker("Project relation", selection: $store.state.settings.projectProperty) {
+                        ForEach(Array(Set(schema.relations + [store.state.settings.projectProperty])).sorted(), id: \.self) { Text($0).tag($0) }
+                    }
+                    Picker("Start date field", selection: $store.state.settings.startProperty) {
+                        Text("None").tag("")
+                        ForEach(schema.dates, id: \.self) { Text($0).tag($0) }
+                    }
+                } else {
+                    Text("Connect to auto-detect fields and choose from your database’s status options.").font(.custom("Inter", size: 11)).foregroundStyle(.secondary)
+                    DisclosureGroup("Manual field mapping") {
+                        field("Title field", text: $store.state.settings.titleProperty)
+                        field("Status field", text: $store.state.settings.statusProperty)
+                        Picker("Status type", selection: $store.state.settings.statusType) { Text("Status").tag("status"); Text("Select").tag("select") }
+                        field("In-progress value", text: $store.state.settings.inProgress)
+                        field("Done value", text: $store.state.settings.done)
+                        field("Project relation field", text: $store.state.settings.projectProperty)
+                        field("Start date field (optional)", text: $store.state.settings.startProperty)
+                    }
+                }
                 Text("The start date field records the latest session start. Full session history stays on this Mac.").font(.custom("Inter", size: 10)).foregroundStyle(.secondary)
-                Button(store.busy ? "Connecting…" : "Connect / refresh tasks") { Task { await store.connect() } }.buttonStyle(PillStyle(primary: true)).disabled(store.busy || store.syncing || store.state.settings.taskSource.isEmpty)
+                Button(store.busy ? "Connecting…" : "Verify connection & refresh") { Task { await store.connect() } }.buttonStyle(PillStyle(primary: true)).disabled(store.busy || store.syncing || store.state.settings.taskSource.isEmpty)
+                if !store.notionConnectionMessage.isEmpty {
+                    Text(store.notionConnectionMessage).font(.custom("Inter", size: 11))
+                        .foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
+                }
+                if let verification = store.state.notionVerification {
+                    Text("Last verified: \(verification.verifiedAt.formatted(date: .abbreviated, time: .shortened))")
+                        .font(.custom("Inter", size: 11)).foregroundStyle(.secondary)
+                }
+                Text("Connection settings are saved on this Mac. W checks access automatically when it opens.")
+                    .font(.custom("Inter", size: 11)).foregroundStyle(.secondary)
                 Divider()
                 CreationPreferences(store: store)
                 Divider()
@@ -155,7 +200,14 @@ struct SettingsView: View {
                 }
                 Button("Quit W") { NSApp.terminate(nil) }.buttonStyle(.plain).foregroundStyle(.secondary)
             }.textFieldStyle(.roundedBorder)
+            .onChange(of: store.state.settings) { _, _ in store.notionSettingsChanged() }
             .disabled(store.busy || store.syncing)
+        }
+    }
+    func statusPicker(_ label: String, selection: Binding<String>, options: [String]) -> some View {
+        Picker(label, selection: selection) {
+            if !options.contains(selection.wrappedValue) { Text("Choose a status…").tag(selection.wrappedValue) }
+            ForEach(options, id: \.self) { Text($0).tag($0) }
         }
     }
     func field(_ label: String, text: Binding<String>) -> some View { VStack(alignment: .leading, spacing: 4) { Text(label).font(.custom("Inter", size: 10)).foregroundStyle(.secondary); TextField(label, text: text) } }

@@ -72,6 +72,7 @@ public struct SavedState: Codable {
     public var pending: [PendingUpdate] = []
     public var settings = NotionSettings()
     public var validatedSettings: NotionSettings?
+    public var notionVerification: NotionVerification?
     public var extensionMinutes = 5
     public var checkIns = true
     public init() {}

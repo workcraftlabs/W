@@ -45,6 +45,7 @@ final class IslandPanel: NSPanel { override var canBecomeKey: Bool { true }; ove
         NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(sleep), name: NSWorkspace.willSleepNotification, object: nil)
         UNUserNotificationCenter.current().delegate = self
         show()
+        Task { await store.restoreNotionConnection() }
     }
     private func updateVisibility(menuBar: Bool, dock: Bool) {
         if menuBar && statusItem == nil {

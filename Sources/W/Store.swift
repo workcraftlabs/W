@@ -1,6 +1,7 @@
 import SwiftUI
 import WCore
 import Security
+import CryptoKit
 import UserNotifications
 
 @MainActor final class Store: ObservableObject {
@@ -13,7 +14,31 @@ import UserNotifications
     @Published var now = Date()
     @Published var checkIn = false
     @Published var compact = false
-    @Published var token = ""
+    private var restoringState = true
+    @Published var token = "" {
+        didSet {
+            if !restoringState && token != oldValue {
+                notionConnection = .unchecked; notionConnectionMessage = "Token changed. Verify the connection to save it."; verifiedSettings = nil
+                state.notionVerification = nil; save()
+            }
+        }
+    }
+    enum NotionConnection { case unchecked, saved, checking, connected, failed }
+    @Published var notionConnection: NotionConnection = .unchecked
+    @Published var notionConnectionMessage = ""
+    @Published var notionSchema: NotionSchema?
+    private var notionSchemaSource = ""
+    var notionConnected: Bool { notionConnection == .connected && verifiedSettings == state.settings }
+    func notionSettingsChanged() {
+        guard !busy else { return }
+        if notionConnected { return }
+        if notionSchemaSource != state.settings.taskSource { notionSchema = nil }
+        verifiedSettings = nil
+        state.notionVerification = nil
+        notionConnection = .unchecked
+        notionConnectionMessage = "Settings saved. Connect to verify access and load tasks."
+        save()
+    }
     @Published var showInMenuBar = UserDefaults.standard.object(forKey: "showInMenuBar") as? Bool ?? true {
         didSet { UserDefaults.standard.set(showInMenuBar, forKey: "showInMenuBar") }
     }
@@ -33,14 +58,35 @@ import UserNotifications
             if FileManager.default.fileExists(atPath: file.path) { state = try JSONDecoder().decode(SavedState.self, from: Data(contentsOf: file)) }
         } catch { persistenceOK = false; message = "Cannot load saved sessions. Your file was preserved: \(error.localizedDescription)" }
         token = Keychain.read() ?? ""
-        verifiedSettings = state.validatedSettings
+        verifiedSettings = nil
+        if state.notionVerification?.matches(settings: state.settings, tokenFingerprint: tokenFingerprint) == true {
+            notionConnection = .saved
+            notionConnectionMessage = "Saved connection. Checking access…"
+        }
         if state.active != nil {
             // Recovery never counts unattended time after the last durable heartbeat.
             state.active?.runningSince = nil
             message = "Recovered your session, paused. Resume when ready."
             save()
         }
+        restoringState = false
         timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in Task { @MainActor in self?.tick() } }
+    }
+    var tokenFingerprint: String {
+        SHA256.hash(data: Data(token.trimmingCharacters(in: .whitespacesAndNewlines).utf8)).map { String(format: "%02x", $0) }.joined()
+    }
+    var notionStatusLabel: String {
+        switch notionConnection {
+        case .connected: return notionConnected ? "NOTION CONNECTED" : "NOTION NOT VERIFIED"
+        case .saved: return "NOTION CONNECTION SAVED"
+        case .checking: return "CHECKING NOTION"
+        case .failed: return "NOTION CONNECTION FAILED"
+        case .unchecked: return "NOTION NOT VERIFIED"
+        }
+    }
+    func restoreNotionConnection() async {
+        guard !token.isEmpty, !state.settings.taskSource.isEmpty else { return }
+        await connect(syncPending: false)
     }
     var matches: [(task: WorkTask, score: Double)] { Matcher.ranked(query, tasks: state.tasks) }
     var elapsed: TimeInterval { state.active?.elapsed(at: now) ?? 0 }
@@ -89,18 +135,39 @@ import UserNotifications
     }
     func extend() { state.active?.extend(minutes: state.extensionMinutes); checkIn = false; save() }
     func keepGoing() { checkIn = false; state.active?.checkInAt = nil; save() }
-    func connect() async {
+    func connect(syncPending: Bool = true) async {
         guard !busy, !syncing else { return }
         if let previous = state.validatedSettings, previous != state.settings, (state.active != nil || !state.pending.isEmpty) { message = "Stop the active session and sync pending updates before changing the connection."; return }
-        busy = true; defer { busy = false }
+        busy = true; notionConnection = .checking
+        notionConnectionMessage = "Checking access and loading tasks…"
+        let settings = state.settings
+        let credential = token.trimmingCharacters(in: .whitespacesAndNewlines)
+        let fingerprint = tokenFingerprint
+        save() // Keep draft IDs even when validation or the network request fails.
+        defer { busy = false }
         do {
-            try Keychain.write(token)
-            let result = try await NotionClient(token: token).fetch(state.settings)
+            if syncPending { try Keychain.write(credential) }
+            let client = NotionClient(token: credential)
+            let schema = try await client.discover(settings)
+            guard state.settings == settings, tokenFingerprint == fingerprint else { notionConnection = .unchecked; return }
+            notionSchema = schema
+            notionSchemaSource = settings.taskSource
+            state.settings = schema.suggested
+            save()
+            let result = try await client.fetch(schema.suggested)
+            guard state.settings == schema.suggested, tokenFingerprint == fingerprint else { notionConnection = .unchecked; return }
             state.tasks = state.tasks.filter { !$0.remote } + result.0; state.projects = result.1
             verifiedSettings = state.settings; state.validatedSettings = state.settings
-            save(); message = "Connected. \(result.0.count) tasks indexed."
-            await flush()
-        } catch { verifiedSettings = nil; message = error.localizedDescription }
+            state.notionVerification = NotionVerification(settings: state.settings, tokenFingerprint: fingerprint)
+            notionConnection = .connected
+            notionConnectionMessage = "Connected · \(result.0.count) tasks · \(result.1.count) projects"
+            save(); message = notionConnectionMessage
+            if syncPending { await flush() }
+        } catch {
+            verifiedSettings = nil; notionConnection = .failed
+            notionConnectionMessage = error.localizedDescription
+            message = notionConnectionMessage
+        }
     }
     func create(title: String, projectID: String, values: [String: CreationValue] = [:]) async {
         guard !busy, state.active == nil, persistenceOK else { return }
