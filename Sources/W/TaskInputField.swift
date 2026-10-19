@@ -39,6 +39,8 @@ struct TaskInputField: NSViewRepresentable {
         scroll.hasVerticalScroller = true
         scroll.autohidesScrollers = true
         scroll.scrollerStyle = .overlay
+        scroll.verticalScrollElasticity = .none
+        scroll.horizontalScrollElasticity = .none
         scroll.documentView = field
         return scroll
     }
@@ -65,18 +67,26 @@ struct TaskInputField: NSViewRepresentable {
         }
     }
     func sizeThatFits(_ proposal: ProposedViewSize, nsView scroll: NSScrollView, context: Context) -> CGSize? {
-        guard let field = scroll.documentView as? InputView,
-              let container = field.textContainer, let layout = field.layoutManager else { return nil }
-        let width = max(1, proposal.width ?? 320)
-        field.setFrameSize(NSSize(width: width, height: field.frame.height))
-        container.containerSize = NSSize(width: width, height: CGFloat.greatestFiniteMagnitude)
-        layout.ensureLayout(for: container)
-        let used = max(layout.usedRect(for: container).maxY, layout.extraLineFragmentUsedRect.maxY)
-        let height = max(22, ceil(used + field.textContainerInset.height * 2))
-        field.setFrameSize(NSSize(width: width, height: height))
-        return CGSize(width: width, height: min(112, height))
+        guard let field = scroll.documentView as? InputView else { return nil }
+        let proposedWidth = proposal.width ?? 320
+        let width = proposedWidth.isFinite ? max(1, proposedWidth) : 320
+        return CGSize(width: width, height: field.measuredHeight(for: width))
     }
     final class InputView: NSTextView {
+        func measuredHeight(for width: CGFloat) -> CGFloat {
+            // SwiftUI probes several widths, including zero, before placing the view.
+            // Measuring must never resize the live editor or change its scroll offset.
+            let storage = NSTextStorage(attributedString: attributedString())
+            let layout = NSLayoutManager()
+            let container = NSTextContainer(size: NSSize(width: max(1, width), height: CGFloat.greatestFiniteMagnitude))
+            container.lineFragmentPadding = 0
+            layout.addTextContainer(container)
+            storage.addLayoutManager(layout)
+            layout.ensureLayout(for: container)
+            let used = max(layout.usedRect(for: container).maxY, layout.extraLineFragmentUsedRect.maxY)
+            return min(112, max(22, ceil(used + textContainerInset.height * 2)))
+        }
+
         override var mouseDownCanMoveWindow: Bool { false }
         override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
         override func mouseDown(with event: NSEvent) {

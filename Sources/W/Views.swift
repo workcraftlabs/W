@@ -62,6 +62,7 @@ struct IslandView: View {
                 }
                 HStack {
                     TaskInputField(text: $store.query, focused: $focused, submit: submitSearch)
+                        .transaction { $0.animation = nil }
                     DictationButton(active: speech.listening || speech.starting) {
                         if speech.listening || speech.starting { speech.stop() }
                         else { Task { await speech.start { store.query = $0 } } }
