@@ -6,7 +6,7 @@ public struct CreationField: Codable, Identifiable, Equatable {
     public let type: String
     public let options: [String]
     public static func parse(_ properties: [String: [String: Any]], settings: NotionSettings) -> [CreationField] {
-        let supported: Set<String> = ["rich_text", "number", "select", "multi_select", "date", "checkbox", "url", "email", "phone_number"]
+        let supported: Set<String> = ["rich_text", "number", "select", "multi_select", "date", "checkbox", "url", "email", "phone_number", "people"]
         return properties.compactMap { name, property in
             guard name != settings.statusProperty, name != settings.titleProperty, name != settings.projectProperty,
                   let type = property["type"] as? String, supported.contains(type), property["readOnly"] as? Bool != true else { return nil }
@@ -36,6 +36,9 @@ public struct CreationField: Codable, Identifiable, Equatable {
                 if !value.options.isEmpty {
                     result[id] = field.type == "select" ? ["select": ["name": value.options[0]]] : ["multi_select": value.options.map { ["name": $0] }]
                 }
+            case "people":
+                guard value.options.allSatisfy({ UUID(uuidString: $0) != nil }) else { throw NotionError("Choose a workspace member for \(field.name).") }
+                result[id] = ["people": value.options.map { ["object": "user", "id": $0] }]
             case "date":
                 if let day = value.date {
                     guard let parsed = CreationValue.dayFormatter.date(from: day), CreationValue.dayFormatter.string(from: parsed) == day else { throw NotionError("Choose a valid date for \(field.name).") }

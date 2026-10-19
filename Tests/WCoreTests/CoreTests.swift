@@ -76,6 +76,7 @@ import Security
         rejects("Tampered JWT signature") { _ = try ChatGPTProtocol.verifyJWT(signed + "." + ChatGPTProtocol.base64URL(Data(repeating: 0, count: signature.count)), keys: keys, client: "client", nonce: "nonce", subject: "user") }
         count += try TaskPropertyChecks.run()
         count += try CreationFieldChecks.run()
+        count += try AssigneeChecks.run()
         print("\(count) checks passed.")
     }
 }

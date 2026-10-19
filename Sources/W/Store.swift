@@ -114,7 +114,7 @@ import UserNotifications
                 task = WorkTask(title: name)
             } else {
                 guard verifiedSettings == state.settings else { throw NotionError("Refresh and validate your Notion connection before creating a task.") }
-                task = try await NotionClient(token: token).create(title: name, project: project, settings: state.settings, values: values)
+                task = try await NotionClient(token: token).create(title: name, project: project, settings: state.settings, values: CreationValue.assigningDefault(values, fieldID: assigneeFieldID, personID: defaultAssigneeID))
             }
             state.tasks.insert(task, at: 0); save(); start(task)
         } catch {

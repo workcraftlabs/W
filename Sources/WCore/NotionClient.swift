@@ -77,6 +77,11 @@ public struct NotionClient {
     }
     public func create(title: String, project: Project?, settings: NotionSettings, values: [String: CreationValue] = [:]) async throws -> WorkTask {
         let fields = values.isEmpty ? [] : try await creationFields(settings)
+        let peopleIDs = fields.filter { $0.type == "people" }.flatMap { values[$0.id]?.options ?? [] }
+        if !peopleIDs.isEmpty {
+            let members = try await people()
+            guard peopleIDs.allSatisfy({ id in members.contains { $0.id == id } }) else { throw NotionError("The selected assignee is no longer available. Refresh members in W Settings.") }
+        }
         var properties = try CreationField.payload(fields: fields, values: values)
         properties[settings.titleProperty] = ["title": [["text": ["content": title]]]]
         if let project { properties[settings.projectProperty] = ["relation": [["id": project.id]]] }

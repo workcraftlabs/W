@@ -82,3 +82,7 @@ After refreshing Notion tasks, open Settings → Task details → Visible proper
 ### New-task fields
 
 Settings → New task fields controls the editable fields shown before creation, independently of the read-only timer details. Text and numeric properties use inputs; select and multi-select use the existing database options. Enable Default to today on individual date fields to prefill the current local date on each new form. You can change or clear that date before saving. Formulas, rollups, and system fields are excluded. Title/project remain built-in and W manages status. Press 2 to review the new task, then Create & start saves its entered properties and starts the timer. Blank fields are omitted so Notion defaults remain intact.
+
+### Default assignee
+
+Settings → New task fields → Default assignee lets you choose a People property and a workspace member per task database. Members are loaded from Notion; bot accounts are excluded, and email addresses distinguish duplicate names. The selection prefills new-task forms and can be changed or cleared for one task. The integration needs permission to read user information. Notion’s Created by remains the integration and cannot be changed through this preference.

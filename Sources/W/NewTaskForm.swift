@@ -9,7 +9,7 @@ struct NewTaskForm: View {
     @State private var values: [String: CreationValue] = [:]
     @State private var loading = true
     @State private var error = ""
-    var fields: [CreationField] { store.creationFields.filter { store.enabledCreationIDs.contains($0.id) } }
+    var fields: [CreationField] { store.newTaskFields }
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("New task").font(.custom("Inter", size: 27)).fontWeight(.medium)
@@ -31,7 +31,7 @@ struct NewTaskForm: View {
                 Button("Back", action: back).buttonStyle(PillStyle())
                 Button(store.busy ? "Creating…" : "Create & start") {
                     Task {
-                        let selected = values.filter { store.enabledCreationIDs.contains($0.key) }
+                        let selected = values.filter { id, _ in fields.contains { $0.id == id } }
                         do {
                             _ = try CreationField.payload(fields: fields, values: selected)
                             error = ""
@@ -44,6 +44,8 @@ struct NewTaskForm: View {
         .task {
             do {
                 try await store.refreshCreationFields()
+                if fields.contains(where: { $0.type == "people" }) { try await store.refreshAssignees() }
+                values = CreationValue.assigningDefault(values, fieldID: store.assigneeFieldID, personID: store.defaultAssigneeID)
                 for field in fields where field.type == "date" && store.todayCreationIDs.contains(field.id) && values[field.id] == nil {
                     var value = values[field.id] ?? CreationValue()
                     value.date = CreationValue.dayFormatter.string(from: Date())
@@ -61,6 +63,11 @@ struct NewTaskForm: View {
         VStack(alignment: .leading, spacing: 5) {
             Text(field.name).font(.custom("Inter", size: 11)).foregroundStyle(.secondary)
             switch field.type {
+            case "people":
+                Picker(field.name, selection: Binding(get: { binding.wrappedValue.options.first ?? "" }, set: { binding.wrappedValue.options = $0.isEmpty ? [] : [$0] })) {
+                    Text("Unassigned").tag("")
+                    ForEach(store.notionPeople) { Text($0.label).tag($0.id) }
+                }.labelsHidden()
             case "select":
                 Picker(field.name, selection: Binding(get: { binding.wrappedValue.options.first ?? "" }, set: { binding.wrappedValue.options = $0.isEmpty ? [] : [$0] })) {
                     Text("Not set").tag("")

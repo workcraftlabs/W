@@ -2,7 +2,7 @@ import SwiftUI
 import WCore
 
 extension Store {
-    private var creationKey: String { "creation." + state.settings.taskSource.replacingOccurrences(of: "-", with: "").lowercased() }
+    var creationKey: String { "creation." + state.settings.taskSource.replacingOccurrences(of: "-", with: "").lowercased() }
     var creationFields: [CreationField] {
         guard let data = UserDefaults.standard.data(forKey: creationKey + ".schema") else { return [] }
         return (try? JSONDecoder().decode([CreationField].self, from: data)) ?? []
@@ -40,6 +40,8 @@ struct CreationPreferences: View {
             VStack(alignment: .leading, spacing: 10) {
                 Text("Choose fields to edit before creating a task. Title and project are shown separately; W manages status. Formulas and rollups are excluded.")
                     .font(.custom("Inter", size: 11)).foregroundStyle(.secondary)
+                AssigneePreferences(store: store)
+                Divider()
                 ForEach(store.creationFields) { field in
                     Toggle(field.name, isOn: Binding(get: { store.enabledCreationIDs.contains(field.id) }, set: { store.setCreationPreference(field.id, enabled: $0) }))
                     if field.type == "date", store.enabledCreationIDs.contains(field.id) {
