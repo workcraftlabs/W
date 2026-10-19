@@ -15,7 +15,8 @@ final class IslandPanel: NSPanel { override var canBecomeKey: Bool { true }; ove
     let store = Store()
     var panel: IslandPanel!
     var statusItem: NSStatusItem!
-    var hotKey: EventHotKeyRef?
+    var hotKeys: [EventHotKeyRef] = []
+    private let droplet = DropletTransition()
     var handler: EventHandlerRef?
     private var transitioning = false
     private var visibilitySubscription: AnyCancellable?
@@ -35,8 +36,12 @@ final class IslandPanel: NSPanel { override var canBecomeKey: Bool { true }; ove
             let delegate = Unmanaged<AppDelegate>.fromOpaque(context).takeUnretainedValue()
             Task { @MainActor in delegate.toggle() }; return noErr
         }, 1, &event, Unmanaged.passUnretained(self).toOpaque(), &handler)
-        let result = RegisterEventHotKey(UInt32(kVK_ANSI_W), UInt32(controlKey | optionKey), EventHotKeyID(signature: 0x57415050, id: 1), GetApplicationEventTarget(), 0, &hotKey)
-        if result != noErr { store.message = "Shortcut unavailable. Open W from the menu bar." }
+        for (index, key) in [kVK_ANSI_W, kVK_ANSI_N, kVK_ANSI_J].enumerated() {
+            var reference: EventHotKeyRef?
+            let result = RegisterEventHotKey(UInt32(key), UInt32(controlKey | optionKey), EventHotKeyID(signature: 0x57415050, id: UInt32(index + 1)), GetApplicationEventTarget(), 0, &reference)
+            if result == noErr, let reference { hotKeys.append(reference) }
+            else { store.message = "A W shortcut is unavailable. Open W from the menu bar." }
+        }
         NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(sleep), name: NSWorkspace.willSleepNotification, object: nil)
         UNUserNotificationCenter.current().delegate = self
         show()
@@ -62,21 +67,29 @@ final class IslandPanel: NSPanel { override var canBecomeKey: Bool { true }; ove
         if panel.isVisible { panel.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true); return }
         let destination = anchoredFrame(size: panel.frame.size)
         let reducedMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
-        panel.setFrame(reducedMotion ? destination : destination.offsetBy(dx: 0, dy: 64), display: false)
-        panel.alphaValue = reducedMotion ? 1 : 0
-        panel.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
-        guard !reducedMotion else { return }
+        panel.setFrame(destination, display: false)
+        panel.alphaValue = 0
         transitioning = true
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = 0.3
-            context.timingFunction = CAMediaTimingFunction(controlPoints: 0.16, 1, 0.3, 1)
-            panel.animator().setFrame(destination, display: true)
-            panel.animator().alphaValue = 1
-        } completionHandler: { [weak self] in
-            Task { @MainActor in self?.transitioning = false }
+        if !reducedMotion { droplet.present(destination: destination, appearance: panel.effectiveAppearance) }
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            if !reducedMotion { try? await Task.sleep(for: .milliseconds(320)) }
+            panel.orderFrontRegardless()
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = reducedMotion ? 0.15 : 0.08
+                self.panel.animator().alphaValue = 1
+            } completionHandler: { [weak self] in
+                Task { @MainActor in
+                    guard let self else { return }
+                    self.droplet.dismiss()
+                    self.transitioning = false
+                    self.panel.makeKeyAndOrderFront(nil)
+                    NSApp.activate(ignoringOtherApps: true)
+                }
+            }
         }
     }
+
     func hide() {
         guard panel.isVisible, !transitioning else { return }
         guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else { panel.orderOut(nil); return }
@@ -97,16 +110,10 @@ final class IslandPanel: NSPanel { override var canBecomeKey: Bool { true }; ove
     }
     @objc func toggle() { panel.isVisible ? hide() : show() }
     private func anchoredFrame(size: NSSize) -> NSRect {
-        let buttonWindow = statusItem?.button?.window
-        var screen = buttonWindow?.screen ?? NSScreen.main
-        if buttonWindow == nil {
-            for candidate in NSScreen.screens where NSMouseInRect(NSEvent.mouseLocation, candidate.frame, false) {
-                screen = candidate; break
-            }
-        }
+        let screen = NSScreen.screens.first { NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) } ?? NSScreen.main
         guard let screen else { return NSRect(origin: panel.frame.origin, size: size) }
         let visible = screen.visibleFrame
-        let anchorX = buttonWindow?.frame.midX ?? visible.midX
+        let anchorX = screen.frame.midX
         let x = min(max(anchorX - size.width / 2, visible.minX + 12), visible.maxX - size.width - 12)
         return NSRect(x: x, y: visible.maxY - size.height - 10, width: size.width, height: size.height)
     }
@@ -121,7 +128,7 @@ final class IslandPanel: NSPanel { override var canBecomeKey: Bool { true }; ove
         panel.setFrameOrigin(NSPoint(x: frame.midX - panel.frame.width / 2, y: frame.maxY - panel.frame.height - 10))
     }
     @objc func sleep() { if store.state.active?.runningSince != nil { store.pause(); store.message = "Paused when your Mac went to sleep." } }
-    func applicationWillTerminate(_ notification: Notification) { store.pause(); if let hotKey { UnregisterEventHotKey(hotKey) } }
+    func applicationWillTerminate(_ notification: Notification) { store.pause(); droplet.dismiss(); hotKeys.forEach { UnregisterEventHotKey($0) } }
     nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification, withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) { completionHandler([.banner, .sound]) }
     nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse, withCompletionHandler completionHandler: @escaping () -> Void) { Task { @MainActor in self.show() }; completionHandler() }
 }
