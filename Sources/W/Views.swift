@@ -34,7 +34,7 @@ struct IslandView: View {
                         Button { store.compact = true } label: { Image(systemName: "arrow.down.right.and.arrow.up.left") }.buttonStyle(.plain).help("Compact timer")
                         Button(action: dock) { Image(systemName: "rectangle.topthird.inset.filled") }.buttonStyle(.plain).help("Dock at top of current screen")
                     }.foregroundStyle(.secondary)
-                    Text(session.task.title).font(.custom("Inter", size: 27)).fontWeight(.medium).fixedSize(horizontal: false, vertical: true).lineLimit(3)
+                    TaskTitleView(task: session.task, compact: false)
                     Text(session.task.project.isEmpty ? (session.task.remote ? "Notion task" : "Local task") : session.task.project).foregroundStyle(.secondary)
                     Text(store.timeText).font(.custom("Inter", size: 60)).fontWeight(.light).monospacedDigit().contentTransition(.numericText())
                     HStack {
@@ -175,7 +175,7 @@ struct PanelRoot: View {
                 VStack(spacing: 14) {
                     HStack {
                         Circle().fill(session.runningSince == nil ? Color.secondary : accent).frame(width: 6, height: 6)
-                        Text(session.task.title).font(.custom("Inter", size: 13)).fontWeight(.medium).lineLimit(1)
+                        TaskTitleView(task: session.task, compact: true)
                         Spacer()
                         Button { store.compact = false } label: { Image(systemName: "arrow.up.left.and.arrow.down.right") }.help("Expand timer")
                     }

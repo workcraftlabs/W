@@ -3,6 +3,7 @@ import AppKit
 import Carbon
 import CoreText
 import Combine
+import QuartzCore
 import UserNotifications
 
 @main struct WApp: App {
@@ -16,6 +17,7 @@ final class IslandPanel: NSPanel { override var canBecomeKey: Bool { true }; ove
     var statusItem: NSStatusItem!
     var hotKey: EventHotKeyRef?
     var handler: EventHandlerRef?
+    private var transitioning = false
     private var visibilitySubscription: AnyCancellable?
     func applicationDidFinishLaunching(_ notification: Notification) {
         let fontBundle = Bundle.main.url(forResource: "W_W", withExtension: "bundle").flatMap { Bundle(url: $0) } ?? Bundle.module
@@ -24,7 +26,7 @@ final class IslandPanel: NSPanel { override var canBecomeKey: Bool { true }; ove
         panel.level = .floating; panel.isOpaque = false; panel.backgroundColor = .clear
         panel.hasShadow = true; panel.isMovableByWindowBackground = true
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        panel.contentView = NSHostingView(rootView: PanelRoot(store: store, dock: { [weak self] in self?.dock() }, hide: { [weak self] in self?.panel.orderOut(nil) }, resize: { [weak self] compact in self?.resize(compact) }))
+        panel.contentView = NSHostingView(rootView: PanelRoot(store: store, dock: { [weak self] in self?.dock() }, hide: { [weak self] in self?.hide() }, resize: { [weak self] compact in self?.resize(compact) }))
         visibilitySubscription = store.$showInMenuBar.combineLatest(store.$showInDock)
             .sink { [weak self] menuBar, dock in self?.updateVisibility(menuBar: menuBar, dock: dock) }
         var event = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
@@ -37,7 +39,7 @@ final class IslandPanel: NSPanel { override var canBecomeKey: Bool { true }; ove
         if result != noErr { store.message = "Shortcut unavailable. Open W from the menu bar." }
         NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(sleep), name: NSWorkspace.willSleepNotification, object: nil)
         UNUserNotificationCenter.current().delegate = self
-        dock(); show()
+        show()
     }
     private func updateVisibility(menuBar: Bool, dock: Bool) {
         if menuBar && statusItem == nil {
@@ -55,8 +57,59 @@ final class IslandPanel: NSPanel { override var canBecomeKey: Bool { true }; ove
         show()
         return true
     }
-    func show() { panel.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true) }
-    @objc func toggle() { panel.isVisible ? panel.orderOut(nil) : show() }
+    func show() {
+        guard !transitioning else { return }
+        if panel.isVisible { panel.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true); return }
+        let destination = anchoredFrame(size: panel.frame.size)
+        let reducedMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        panel.setFrame(reducedMotion ? destination : destination.offsetBy(dx: 0, dy: 64), display: false)
+        panel.alphaValue = reducedMotion ? 1 : 0
+        panel.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        guard !reducedMotion else { return }
+        transitioning = true
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.3
+            context.timingFunction = CAMediaTimingFunction(controlPoints: 0.16, 1, 0.3, 1)
+            panel.animator().setFrame(destination, display: true)
+            panel.animator().alphaValue = 1
+        } completionHandler: { [weak self] in
+            Task { @MainActor in self?.transitioning = false }
+        }
+    }
+    func hide() {
+        guard panel.isVisible, !transitioning else { return }
+        guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else { panel.orderOut(nil); return }
+        transitioning = true
+        let destination = panel.frame.offsetBy(dx: 0, dy: 40)
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.18
+            context.timingFunction = CAMediaTimingFunction(name: .easeIn)
+            panel.animator().setFrame(destination, display: true)
+            panel.animator().alphaValue = 0
+        } completionHandler: { [weak self] in
+            Task { @MainActor in
+                self?.panel.orderOut(nil)
+                self?.panel.alphaValue = 1
+                self?.transitioning = false
+            }
+        }
+    }
+    @objc func toggle() { panel.isVisible ? hide() : show() }
+    private func anchoredFrame(size: NSSize) -> NSRect {
+        let buttonWindow = statusItem?.button?.window
+        var screen = buttonWindow?.screen ?? NSScreen.main
+        if buttonWindow == nil {
+            for candidate in NSScreen.screens where NSMouseInRect(NSEvent.mouseLocation, candidate.frame, false) {
+                screen = candidate; break
+            }
+        }
+        guard let screen else { return NSRect(origin: panel.frame.origin, size: size) }
+        let visible = screen.visibleFrame
+        let anchorX = buttonWindow?.frame.midX ?? visible.midX
+        let x = min(max(anchorX - size.width / 2, visible.minX + 12), visible.maxX - size.width - 12)
+        return NSRect(x: x, y: visible.maxY - size.height - 10, width: size.width, height: size.height)
+    }
     func resize(_ compact: Bool) {
         let old = panel.frame
         let size = compact ? NSSize(width: 360, height: 145) : NSSize(width: 440, height: 570)

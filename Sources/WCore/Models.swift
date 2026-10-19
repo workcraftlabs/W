@@ -11,6 +11,17 @@ public struct WorkTask: Identifiable, Codable, Equatable {
         self.id = id; self.title = title; self.projectID = projectID; self.project = project; self.done = done; self.remote = remote
     }
 }
+public extension WorkTask {
+    var notionWebURL: URL? {
+        guard remote, let pageID = UUID(uuidString: id.count == 32 ? "\(id.prefix(8))-\(id.dropFirst(8).prefix(4))-\(id.dropFirst(12).prefix(4))-\(id.dropFirst(16).prefix(4))-\(id.suffix(12))" : id) else { return nil }
+        return URL(string: "https://www.notion.so/\(pageID.uuidString.replacingOccurrences(of: "-", with: "").lowercased())")
+    }
+    var notionAppURL: URL? {
+        guard let web = notionWebURL, var parts = URLComponents(url: web, resolvingAgainstBaseURL: false) else { return nil }
+        parts.scheme = "notion"
+        return parts.url
+    }
+}
 public struct Project: Identifiable, Codable, Equatable {
     public var id: String
     public var title: String

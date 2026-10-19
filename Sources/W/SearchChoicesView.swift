@@ -23,17 +23,22 @@ struct SearchChoicesView: View {
     private var ready: Bool { request != nil && resultID == request?.id && !searching }
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text(searching ? "Searching…" : (ready ? source : "Press Enter to search"))
-                    .font(.custom("Inter", size: 11)).foregroundStyle(.secondary)
-                Spacer()
-                Button(searching ? "Searching…" : "Search", action: search)
-                    .buttonStyle(.plain)
-                    .disabled(searching || store.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            }
-            if !ready && !searching {
-                Text(chat.connected ? "Search with ChatGPT · uses your plan" : "Basic search · no AI needed")
-                    .font(.custom("Inter", size: 11)).foregroundStyle(.secondary)
+            HStack(spacing: 8) {
+                if searching {
+                    ProgressView().controlSize(.small)
+                    Text("Finding your task…").font(.custom("Inter", size: 11)).foregroundStyle(.secondary)
+                } else {
+                    Text(ready ? source : (chat.connected ? "ChatGPT · uses your plan" : "Basic matching · no AI needed"))
+                        .font(.custom("Inter", size: 11)).foregroundStyle(.secondary)
+                    Spacer()
+                    Button(action: search) {
+                        HStack(spacing: 5) {
+                            Text(ready ? "Try again" : "Search")
+                            Image(systemName: "return").font(.system(size: 10))
+                        }.font(.custom("Inter", size: 11))
+                    }.buttonStyle(.plain).help("Press Enter to search")
+                        .disabled(store.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
             }
             if ready, let proposal {
                 ScrollView {
@@ -97,7 +102,7 @@ struct SearchChoicesView: View {
         let basic = Matcher.ranked(request.query, tasks: store.state.tasks).map(\.task)
         var found = basic
         var suggestion = AIProposal(taskID: basic.first?.id, title: request.query.trimmingCharacters(in: .whitespacesAndNewlines), projectID: nil, explanation: "")
-        var label = "Basic search"
+        var label = "Choose a task"
         if chat.connected {
             do {
                 let rest = store.state.tasks.filter { task in !basic.contains { $0.id == task.id } }
