@@ -61,7 +61,7 @@ struct IslandView: View {
                     Text("Find a task. Start a session.").foregroundStyle(.secondary).font(.custom("Inter", size: 13))
                 }
                 HStack {
-                    TaskInputField(text: $store.query, focused: $focused, submit: submitSearch).frame(height: 22)
+                    TaskInputField(text: $store.query, focused: $focused, submit: submitSearch)
                     DictationButton(active: speech.listening || speech.starting) {
                         if speech.listening || speech.starting { speech.stop() }
                         else { Task { await speech.start { store.query = $0 } } }
