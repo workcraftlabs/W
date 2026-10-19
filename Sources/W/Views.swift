@@ -11,7 +11,7 @@ struct IslandView: View {
     @State private var creating = false
     @State private var newTitle = ""
     @State private var projectID = ""
-    @FocusState private var focused: Bool
+    @State private var focused = false
     let dock: () -> Void
     let hide: () -> Void
     var body: some View {
@@ -72,12 +72,16 @@ struct IslandView: View {
                     Text("Find a task. Start a session.").foregroundStyle(.secondary).font(.custom("Inter", size: 13))
                 }
                 HStack {
-                    TextField("A task, a project, a place to start…", text: $store.query).textFieldStyle(.plain).focused($focused).onSubmit(submitSearch)
+                    TaskInputField(text: $store.query, focused: $focused, submit: submitSearch).frame(height: 22)
                     DictationButton(active: speech.listening || speech.starting) {
                         if speech.listening || speech.starting { speech.stop() }
                         else { Task { await speech.start { store.query = $0 } } }
                     }.frame(width: 24, height: 24)
-                }.padding(16).background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 14))
+                }.padding(16).background {
+                    RoundedRectangle(cornerRadius: 14).fill(Color.primary.opacity(0.06))
+                        .contentShape(RoundedRectangle(cornerRadius: 14))
+                        .onTapGesture { focused = true }
+                }
                 SearchChoicesView(chat: store.chat, store: store, request: searchRequest, editing: focused, searching: $searching, search: submitSearch) { proposal in
                     speech.stop(); newTitle = proposal.title; projectID = proposal.projectID ?? ""; creating = true
                 }
