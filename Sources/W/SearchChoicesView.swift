@@ -52,13 +52,11 @@ struct SearchChoicesView: View {
                             Text("No matching task found").font(.custom("Inter", size: 13)).foregroundStyle(.secondary)
                         }
                         Button {
-                            Task { await store.create(title: proposal.title, projectID: proposal.projectID ?? "") }
+                            edit(proposal)
                         } label: {
-                            choice("2", title: proposal.title, detail: "Create & start · \(projectName(proposal.projectID))")
+                            choice("2", title: proposal.title, detail: "Review & create · \(projectName(proposal.projectID))")
                         }.buttonStyle(.plain)
                             .choiceShortcut("2", enabled: !editing)
-                        Button("Edit new task details") { edit(proposal) }
-                            .buttonStyle(.plain).font(.custom("Inter", size: 11)).foregroundStyle(.secondary)
                         if !proposal.explanation.isEmpty {
                             Text(proposal.explanation).font(.custom("Inter", size: 11)).foregroundStyle(.secondary)
                         }

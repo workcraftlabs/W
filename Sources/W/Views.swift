@@ -54,19 +54,7 @@ struct IslandView: View {
                     Button("Stop for now") { store.stop(done: false) }.buttonStyle(.plain).foregroundStyle(.secondary)
                 }
             } else if creating {
-                Text("Make room for this.").font(.custom("Inter", size: 27)).fontWeight(.medium)
-                TextField("Task title", text: $newTitle).textFieldStyle(.roundedBorder)
-                if !store.state.settings.taskSource.isEmpty {
-                    Picker("Project", selection: $projectID) {
-                        Text("No project").tag("")
-                        ForEach(store.state.projects) { Text($0.title).tag($0.id) }
-                    }
-                }
-                Text(store.state.settings.taskSource.isEmpty ? "This task will be saved on this Mac. Connect Notion in Settings to create tasks there." : "Creates a Notion task and starts a work session. Only the title and selected project are added.").font(.custom("Inter", size: 11)).foregroundStyle(.secondary)
-                HStack {
-                    Button("Back") { creating = false }.buttonStyle(PillStyle())
-                    Button("Create & start") { Task { await store.create(title: newTitle, projectID: projectID); if store.state.active != nil { creating = false } } }.buttonStyle(PillStyle(primary: true)).disabled(store.busy || newTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                }
+                NewTaskForm(store: store, title: $newTitle, projectID: $projectID) { creating = false }
             } else {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("What are you working on?").font(.custom("Inter", size: 25)).fontWeight(.medium).tracking(-1)
@@ -150,6 +138,8 @@ struct SettingsView: View {
                 field("Start date field (optional)", text: $store.state.settings.startProperty)
                 Text("The start date field records the latest session start. Full session history stays on this Mac.").font(.custom("Inter", size: 10)).foregroundStyle(.secondary)
                 Button(store.busy ? "Connecting…" : "Connect / refresh tasks") { Task { await store.connect() } }.buttonStyle(PillStyle(primary: true)).disabled(store.busy || store.syncing || store.state.settings.taskSource.isEmpty)
+                Divider()
+                CreationPreferences(store: store)
                 Divider()
                 TaskPropertySettings(store: store)
                 Divider()

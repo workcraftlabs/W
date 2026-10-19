@@ -75,8 +75,10 @@ public struct NotionClient {
         }
         return (tasks, projects)
     }
-    public func create(title: String, project: Project?, settings: NotionSettings) async throws -> WorkTask {
-        var properties: [String: Any] = [settings.titleProperty: ["title": [["text": ["content": title]]]]]
+    public func create(title: String, project: Project?, settings: NotionSettings, values: [String: CreationValue] = [:]) async throws -> WorkTask {
+        let fields = values.isEmpty ? [] : try await creationFields(settings)
+        var properties = try CreationField.payload(fields: fields, values: values)
+        properties[settings.titleProperty] = ["title": [["text": ["content": title]]]]
         if let project { properties[settings.projectProperty] = ["relation": [["id": project.id]]] }
         let page = try await request("pages", method: "POST", body: ["parent": ["type": "data_source_id", "data_source_id": settings.taskSource], "properties": properties])
         guard let id = page["id"] as? String else { throw NotionError("Notion did not return the new task ID. Refresh before trying again.") }

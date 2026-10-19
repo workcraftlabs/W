@@ -75,6 +75,7 @@ import Security
         check(verified["sub"] as? String == "user", "Real RSA signature verifies against JWKS")
         rejects("Tampered JWT signature") { _ = try ChatGPTProtocol.verifyJWT(signed + "." + ChatGPTProtocol.base64URL(Data(repeating: 0, count: signature.count)), keys: keys, client: "client", nonce: "nonce", subject: "user") }
         count += try TaskPropertyChecks.run()
+        count += try CreationFieldChecks.run()
         print("\(count) checks passed.")
     }
 }

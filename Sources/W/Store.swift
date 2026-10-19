@@ -102,7 +102,7 @@ import UserNotifications
             await flush()
         } catch { verifiedSettings = nil; message = error.localizedDescription }
     }
-    func create(title: String, projectID: String) async {
+    func create(title: String, projectID: String, values: [String: CreationValue] = [:]) async {
         guard !busy, state.active == nil, persistenceOK else { return }
         let name = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty, name.count <= 500 else { message = "Use a task title between 1 and 500 characters."; return }
@@ -114,7 +114,7 @@ import UserNotifications
                 task = WorkTask(title: name)
             } else {
                 guard verifiedSettings == state.settings else { throw NotionError("Refresh and validate your Notion connection before creating a task.") }
-                task = try await NotionClient(token: token).create(title: name, project: project, settings: state.settings)
+                task = try await NotionClient(token: token).create(title: name, project: project, settings: state.settings, values: values)
             }
             state.tasks.insert(task, at: 0); save(); start(task)
         } catch {
