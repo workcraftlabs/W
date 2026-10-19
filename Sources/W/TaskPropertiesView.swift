@@ -64,10 +64,14 @@ struct TaskPropertySettings: View {
                 Text("Connect / refresh tasks to load your database properties.").font(.custom("Inter", size: 11)).foregroundStyle(.secondary)
             } else {
                 DisclosureGroup("Visible properties (\(store.selectedTaskPropertyIDs.count)/4)") {
-                    ForEach(store.availableTaskProperties) { property in
-                        Toggle(property.name, isOn: Binding(get: { store.selectedTaskPropertyIDs.contains(property.id) }, set: { store.setTaskProperty(property.id, visible: $0) }))
-                            .disabled(!store.selectedTaskPropertyIDs.contains(property.id) && store.selectedTaskPropertyIDs.count >= 4)
-                    }
+                    VStack(alignment: .leading, spacing: 8) {
+                        ForEach(store.availableTaskProperties) { property in
+                            Toggle(property.name, isOn: Binding(get: { store.selectedTaskPropertyIDs.contains(property.id) }, set: { store.setTaskProperty(property.id, visible: $0) }))
+                                .toggleStyle(.checkbox)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .disabled(!store.selectedTaskPropertyIDs.contains(property.id) && store.selectedTaskPropertyIDs.count >= 4)
+                        }
+                    }.frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
         }
