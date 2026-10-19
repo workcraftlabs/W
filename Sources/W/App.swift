@@ -2,6 +2,7 @@ import SwiftUI
 import AppKit
 import Carbon
 import CoreText
+import Combine
 import UserNotifications
 
 @main struct WApp: App {
@@ -15,28 +16,44 @@ final class IslandPanel: NSPanel { override var canBecomeKey: Bool { true }; ove
     var statusItem: NSStatusItem!
     var hotKey: EventHotKeyRef?
     var handler: EventHandlerRef?
+    private var visibilitySubscription: AnyCancellable?
     func applicationDidFinishLaunching(_ notification: Notification) {
         let fontBundle = Bundle.main.url(forResource: "W_W", withExtension: "bundle").flatMap { Bundle(url: $0) } ?? Bundle.module
         if let font = fontBundle.url(forResource: "Inter", withExtension: "ttf") { CTFontManagerRegisterFontsForURL(font as CFURL, .process, nil) }
-        NSApp.setActivationPolicy(.accessory)
         panel = IslandPanel(contentRect: NSRect(x: 0, y: 0, width: 440, height: 570), styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         panel.level = .floating; panel.isOpaque = false; panel.backgroundColor = .clear
         panel.hasShadow = true; panel.isMovableByWindowBackground = true
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.contentView = NSHostingView(rootView: PanelRoot(store: store, dock: { [weak self] in self?.dock() }, hide: { [weak self] in self?.panel.orderOut(nil) }, resize: { [weak self] compact in self?.resize(compact) }))
-        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        statusItem.button?.title = "W"; statusItem.button?.target = self; statusItem.button?.action = #selector(toggle)
+        visibilitySubscription = store.$showInMenuBar.combineLatest(store.$showInDock)
+            .sink { [weak self] menuBar, dock in self?.updateVisibility(menuBar: menuBar, dock: dock) }
         var event = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
         InstallEventHandler(GetApplicationEventTarget(), { _, _, context in
             guard let context else { return noErr }
             let delegate = Unmanaged<AppDelegate>.fromOpaque(context).takeUnretainedValue()
             Task { @MainActor in delegate.toggle() }; return noErr
         }, 1, &event, Unmanaged.passUnretained(self).toOpaque(), &handler)
-        let result = RegisterEventHotKey(UInt32(kVK_ANSI_W), UInt32(cmdKey | shiftKey), EventHotKeyID(signature: 0x57415050, id: 1), GetApplicationEventTarget(), 0, &hotKey)
+        let result = RegisterEventHotKey(UInt32(kVK_ANSI_W), UInt32(controlKey | optionKey), EventHotKeyID(signature: 0x57415050, id: 1), GetApplicationEventTarget(), 0, &hotKey)
         if result != noErr { store.message = "Shortcut unavailable. Open W from the menu bar." }
         NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(sleep), name: NSWorkspace.willSleepNotification, object: nil)
         UNUserNotificationCenter.current().delegate = self
         dock(); show()
+    }
+    private func updateVisibility(menuBar: Bool, dock: Bool) {
+        if menuBar && statusItem == nil {
+            statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+            statusItem.button?.title = "W"
+            statusItem.button?.target = self
+            statusItem.button?.action = #selector(toggle)
+        } else if !menuBar, let item = statusItem {
+            NSStatusBar.system.removeStatusItem(item)
+            statusItem = nil
+        }
+        NSApp.setActivationPolicy(dock ? .regular : .accessory)
+    }
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        show()
+        return true
     }
     func show() { panel.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true) }
     @objc func toggle() { panel.isVisible ? panel.orderOut(nil) : show() }

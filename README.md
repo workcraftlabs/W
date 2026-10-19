@@ -14,7 +14,7 @@ open dist/W.app
 
 Use the app bundle rather than `swift run` for microphone permissions and notifications. The build script uses an ad-hoc signature by default. It builds for your Mac's architecture. Distribution to other people still requires Developer ID signing and Apple notarization; Any CI artifacts are development builds, not notarized releases.
 
-Press **Shift–Command–W** or click **W** in the menu bar. Type or dictate, select a match, and start. Drag the panel anywhere or use its dock button to return it to the top of the current display. Escape hides it. The first preview uses a fixed shortcut.
+Press **Control–Option–W** or click **W** in the menu bar. Type or dictate, select a match, and start. Drag the panel anywhere or use its dock button to return it to the top of the current display. Escape hides it. Settings includes separate, persistent switches for the menu bar and Dock icons. Control–Option–W still opens W when both are hidden.
 
 ## Notion setup
 

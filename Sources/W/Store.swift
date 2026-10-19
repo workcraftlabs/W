@@ -14,6 +14,12 @@ import UserNotifications
     @Published var checkIn = false
     @Published var compact = false
     @Published var token = ""
+    @Published var showInMenuBar = UserDefaults.standard.object(forKey: "showInMenuBar") as? Bool ?? true {
+        didSet { UserDefaults.standard.set(showInMenuBar, forKey: "showInMenuBar") }
+    }
+    @Published var showInDock = UserDefaults.standard.bool(forKey: "showInDock") {
+        didSet { UserDefaults.standard.set(showInDock, forKey: "showInDock") }
+    }
     let chat = ChatGPT()
     var file: URL
     var timer: Timer?

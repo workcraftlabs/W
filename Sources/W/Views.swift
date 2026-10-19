@@ -20,7 +20,7 @@ struct IslandView: View {
                 Text(store.state.active == nil ? "FOCUS" : "SESSION").font(.custom("Inter", size: 9)).fontWeight(.semibold).tracking(0.5).foregroundStyle(.secondary)
                 Spacer()
                 Button { speech.stop(); store.showSettings.toggle() } label: { Image(systemName: "slider.horizontal.3") }.help("Settings")
-                Button { speech.stop(); hide() } label: { Image(systemName: "minus") }.help("Hide · ⇧⌘W to reopen")
+                Button { speech.stop(); hide() } label: { Image(systemName: "minus") }.help("Hide · ⌃⌥W to reopen")
             }.buttonStyle(.plain)
             if store.showSettings { SettingsView(store: store) }
             else if let session = store.state.active {
@@ -71,7 +71,10 @@ struct IslandView: View {
                 }
                 HStack {
                     TextField("A task, a project, a place to start…", text: $store.query).textFieldStyle(.plain).focused($focused).onSubmit { if let task = store.matches.first?.task { speech.stop(); store.start(task) } }
-                    Button { if speech.listening { speech.stop() } else { Task { await speech.start { store.query = $0 } } } } label: { Image(systemName: speech.listening ? "stop.circle.fill" : "mic.fill").foregroundStyle(speech.listening ? Color.primary : accent) }.buttonStyle(.plain).help("Dictate on device")
+                    DictationButton(active: speech.listening || speech.starting) {
+                        if speech.listening || speech.starting { speech.stop() }
+                        else { Task { await speech.start { store.query = $0 } } }
+                    }.frame(width: 24, height: 24)
                 }.padding(16).background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 14))
                 ChatMatchView(chat: store.chat, store: store) { proposal in
                     speech.stop(); newTitle = proposal.title; projectID = proposal.projectID ?? ""; creating = true
@@ -100,7 +103,7 @@ struct IslandView: View {
                 Text(store.state.pending.isEmpty ? (store.state.settings.taskSource.isEmpty ? "LOCAL MODE" : "NOTION CONFIGURED") : "\(store.state.pending.count) UPDATES PENDING").font(.custom("Inter", size: 9)).tracking(1)
                 Spacer()
                 if !store.state.pending.isEmpty { Button("Retry") { Task { await store.flush() } }.buttonStyle(.plain).disabled(store.syncing) }
-                Text("⇧⌘W").font(.custom("Inter", size: 11))
+                Text("⌃⌥W").font(.custom("Inter", size: 11))
             }.foregroundStyle(.secondary)
         }
         .font(.custom("Inter", size: 13))
@@ -139,6 +142,10 @@ struct SettingsView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
                 Text("Settings").font(.custom("Inter", size: 26)).fontWeight(.medium)
+                Toggle("Show in menu bar", isOn: $store.showInMenuBar)
+                Toggle("Show in Dock", isOn: $store.showInDock)
+                Text("Open W anytime with Control–Option–W, even with both icons hidden.").font(.custom("Inter", size: 11)).foregroundStyle(.secondary)
+                Divider()
                 ChatSettingsView(chat: store.chat)
                 Divider()
                 Text("Notion").font(.custom("Inter", size: 13)).fontWeight(.semibold)
@@ -156,7 +163,7 @@ struct SettingsView: View {
                 Divider()
                 Toggle("Check in after 25 minutes", isOn: $store.state.checkIns).onChange(of: store.state.checkIns) { _, _ in store.save() }
                 Picker("More time", selection: $store.state.extensionMinutes) { ForEach([5, 10, 15], id: \.self) { Text("\($0) minutes").tag($0) } }.onChange(of: store.state.extensionMinutes) { _, _ in store.save() }
-                Text("Shortcut: ⇧⌘W · Drag the panel to place it anywhere. Sleep pauses tracking automatically.").font(.custom("Inter", size: 11)).foregroundStyle(.secondary)
+                Text("Shortcut: ⌃⌥W · Drag the panel to place it anywhere. Sleep pauses tracking automatically.").font(.custom("Inter", size: 11)).foregroundStyle(.secondary)
                 if !store.state.sessions.isEmpty {
                     Divider(); Text("Recent sessions").font(.custom("Inter", size: 13)).fontWeight(.semibold)
                     ForEach(Array(store.state.sessions.prefix(8))) { session in
