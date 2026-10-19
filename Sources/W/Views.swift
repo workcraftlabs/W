@@ -6,6 +6,8 @@ private let surface = Color(nsColor: .windowBackgroundColor)
 struct IslandView: View {
     @ObservedObject var store: Store
     @StateObject var speech = SpeechInput()
+    @State private var searchRequest: SearchRequest?
+    @State private var searching = false
     @State private var creating = false
     @State private var newTitle = ""
     @State private var projectID = ""
@@ -70,31 +72,17 @@ struct IslandView: View {
                     Text("Find a task. Start a session.").foregroundStyle(.secondary).font(.custom("Inter", size: 13))
                 }
                 HStack {
-                    TextField("A task, a project, a place to start…", text: $store.query).textFieldStyle(.plain).focused($focused).onSubmit { if let task = store.matches.first?.task { speech.stop(); store.start(task) } }
+                    TextField("A task, a project, a place to start…", text: $store.query).textFieldStyle(.plain).focused($focused).onSubmit(submitSearch)
                     DictationButton(active: speech.listening || speech.starting) {
                         if speech.listening || speech.starting { speech.stop() }
                         else { Task { await speech.start { store.query = $0 } } }
                     }.frame(width: 24, height: 24)
                 }.padding(16).background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 14))
-                ChatMatchView(chat: store.chat, store: store) { proposal in
+                SearchChoicesView(chat: store.chat, store: store, request: searchRequest, editing: focused, searching: $searching, search: submitSearch) { proposal in
                     speech.stop(); newTitle = proposal.title; projectID = proposal.projectID ?? ""; creating = true
                 }
                 if !speech.error.isEmpty { Text(speech.error).font(.custom("Inter", size: 11)).foregroundStyle(.secondary) }
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 8) {
-                        if store.query.isEmpty {
-                            Text("READY WHEN YOU ARE").font(.custom("Inter", size: 10)).tracking(0.5).foregroundStyle(.secondary)
-                            ForEach(Array(store.state.tasks.filter { !$0.done }.prefix(3))) { task in taskRow(task) }
-                            if store.state.tasks.isEmpty { Text("Start with a local task, or connect your Notion workspace in Settings.").font(.custom("Inter", size: 13)).foregroundStyle(.secondary).padding(.vertical, 12) }
-                        } else {
-                            Text(store.matches.isEmpty ? "NO CLEAR MATCH" : "POSSIBLE MATCHES · SELECT TO START").font(.custom("Inter", size: 10)).tracking(1).foregroundStyle(.secondary)
-                            ForEach(store.matches, id: \.task.id) { match in taskRow(match.task) }
-                        }
-                        Button {
-                            speech.stop(); newTitle = store.query; projectID = ""; creating = true
-                        } label: { Label("Create a new task", systemImage: "plus").foregroundStyle(accent).padding(.vertical, 12) }.buttonStyle(.plain)
-                    }
-                }
+
             }
             Spacer(minLength: 0)
             if !store.message.isEmpty { Text(store.message).font(.custom("Inter", size: 11)).foregroundStyle(.secondary).lineLimit(3).textSelection(.enabled) }
@@ -113,19 +101,16 @@ struct IslandView: View {
 
         .animation(.easeInOut(duration: 0.22), value: store.state.active == nil)
         .onAppear { focused = true }
+        .onChange(of: store.query) { _, _ in searchRequest = nil }
+        .onChange(of: store.showSettings) { _, _ in searchRequest = nil }
         .onDisappear { speech.stop() }
         .onExitCommand { speech.stop(); hide() }
     }
-    func taskRow(_ task: WorkTask) -> some View {
-        Button { speech.stop(); store.start(task) } label: {
-            HStack {
-                VStack(alignment: .leading, spacing: 5) {
-                    Text(task.title).foregroundStyle(.primary).lineLimit(2)
-                    Text(task.project.isEmpty ? (task.remote ? "Notion" : "On this Mac") : task.project).font(.custom("Inter", size: 11)).foregroundStyle(.secondary)
-                }
-                Spacer(); Image(systemName: "arrow.up.right").foregroundStyle(.secondary)
-            }.padding(12).frame(maxWidth: .infinity, alignment: .leading).background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 10))
-        }.buttonStyle(.plain).disabled(!store.persistenceOK)
+    func submitSearch() {
+        guard !searching, !store.busy, !store.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        speech.stop()
+        focused = false
+        searchRequest = SearchRequest(query: store.query)
     }
 }
 struct PillStyle: ButtonStyle {
@@ -217,7 +202,7 @@ struct ChatSettingsView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("ChatGPT").font(.custom("Inter", size: 13)).fontWeight(.semibold)
-            Text("Use your ChatGPT plan for smarter task matching. Your request and up to 80 task and project names are sent to OpenAI only when you choose Find with ChatGPT.").font(.custom("Inter", size: 11)).foregroundStyle(.secondary)
+            Text("Use your ChatGPT plan for smarter task matching. Your request and up to 80 task and project names are sent to OpenAI when you press Enter or Search. If ChatGPT is unavailable, W uses basic matching.").font(.custom("Inter", size: 11)).foregroundStyle(.secondary)
             if !chat.accounts.isEmpty {
                 Picker("Account", selection: $chat.selected) { ForEach(chat.accounts) { Text($0.label).tag($0.id) } }
                     .disabled(chat.working).onChange(of: chat.selected) { _, _ in Task { await chat.selectAccount() } }
@@ -239,42 +224,5 @@ struct ChatSettingsView: View {
         }.alert("You're using your ChatGPT plan", isPresented: $chat.welcome) {
             Button("Got it") { UserDefaults.standard.set(true, forKey: "chatgptWelcomeSeen") }
         } message: { Text("Eligible AI requests in W use your ChatGPT plan. Manage W's access and limits in ChatGPT Settings → Usage.") }
-    }
-}
-struct ChatMatchView: View {
-    @ObservedObject var chat: ChatGPT
-    @ObservedObject var store: Store
-    @State var proposal: AIProposal?
-    @State var error = ""
-    let create: (AIProposal) -> Void
-    var body: some View {
-        if chat.connected && !store.query.isEmpty {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    Button(chat.working ? "Finding…" : "Find with ChatGPT") {
-                        let query = store.query
-                        proposal = nil; error = ""
-                        Task {
-                            do {
-                                let ranked = store.matches.map(\.task)
-                                let rest = store.state.tasks.filter { task in !ranked.contains(where: { $0.id == task.id }) }
-                                let result = try await chat.match(query: query, tasks: ranked + rest, projects: store.state.projects)
-                                if store.query == query { proposal = result }
-                            } catch { self.error = error.localizedDescription }
-                        }
-                    }.disabled(chat.working)
-                    Spacer()
-                    Link("Manage usage", destination: URL(string: "https://chatgpt.com/settings/usage")!).font(.custom("Inter", size: 10))
-                }
-                Text("Using ChatGPT plan").font(.custom("Inter", size: 10)).foregroundStyle(.secondary)
-                if let proposal {
-                    if let id = proposal.taskID, let task = store.state.tasks.first(where: { $0.id == id && !$0.done }) {
-                        Button("Start: \(task.title)") { store.start(task) }.buttonStyle(PillStyle(primary: true))
-                    } else { Button("Review new task: \(proposal.title)") { create(proposal) }.buttonStyle(.plain) }
-                    Text(proposal.explanation).font(.custom("Inter", size: 11)).foregroundStyle(.secondary).lineLimit(2)
-                }
-                if !error.isEmpty { Text(error).font(.custom("Inter", size: 11)).foregroundStyle(.secondary).lineLimit(3) }
-            }.onChange(of: store.query) { _, _ in proposal = nil; error = "" }
-        }
     }
 }

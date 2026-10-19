@@ -14,7 +14,7 @@ open dist/W.app
 
 Use the app bundle rather than `swift run` for microphone permissions and notifications. The build script uses an ad-hoc signature by default. It builds for your Mac's architecture. Distribution to other people still requires Developer ID signing and Apple notarization; Any CI artifacts are development builds, not notarized releases.
 
-Press **Control–Option–W** or click **W** in the menu bar. Type or dictate, select a match, and start. Drag the panel anywhere or use its dock button to return it to the top of the current display. Escape hides it. Settings includes separate, persistent switches for the menu bar and Dock icons. Control–Option–W still opens W when both are hidden.
+Press **Control–Option–W** or click **W** in the menu bar. Type or dictate and press Enter to search. W uses ChatGPT when connected and basic matching otherwise (also falling back to basic matching if ChatGPT is unavailable). After results appear, press **1** to start the top existing match or **2** to create the displayed new task and start its timer. You can edit the proposed title and project first; number keys remain normal input while typing. Drag the panel anywhere or use its dock button to return it to the top of the current display. Escape hides it. Settings includes separate, persistent switches for the menu bar and Dock icons. Control–Option–W still opens W when both are hidden.
 
 ## Notion setup
 
@@ -69,7 +69,7 @@ The workflow template is at `scripts/ci.yml.example`. Move it to `.github/workfl
 
 ## Optional Sign in with ChatGPT
 
-Open Settings → **Continue with ChatGPT**. W opens OpenAI authorization in your system browser. Approve plan usage, return to W, and choose an available model. On the task screen, **Find with ChatGPT** asks for a task match or new-task suggestion. Select the match or review creation before any Notion change.
+Open Settings → **Continue with ChatGPT**. W opens OpenAI authorization in your system browser. Approve plan usage, return to W, and choose an available model. On the task screen, **Enter** or **Search** asks for a task match or new-task suggestion when connected. Select the match or review creation before any Notion change.
 
 W supports multiple saved account/workspace registrations, account switching, reauthorization, token renewal, and sign-out with attempted remote revocation. OAuth tokens are stored in Keychain. It uses PKCE, fresh state/nonce, a stable per-install host ID, signature-verified OIDC identity, and the issued client ID. It never reads another app's credentials. AI cannot call tools or write to Notion. Invalid IDs, incomplete streams, and usage failures fall back to local matching. Manage plan limits at https://chatgpt.com/settings/usage.
 
