@@ -45,7 +45,7 @@ struct SearchChoicesView: View {
                     VStack(alignment: .leading, spacing: 10) {
                         if let first = matches.first {
                             Button { store.start(first) } label: {
-                                choice("1", title: first.title, detail: "Start existing task" + (first.project.isEmpty ? "" : " · \(first.project)"))
+                                choice("1", title: first.title, detail: "Start existing task" + (first.project.isEmpty ? "" : " · \(first.project)"), task: first)
                             }.buttonStyle(.plain)
                                 .choiceShortcut("1", enabled: !editing)
                         } else {
@@ -66,7 +66,7 @@ struct SearchChoicesView: View {
                             Text("OTHER MATCHES").font(.custom("Inter", size: 9)).foregroundStyle(.secondary)
                             ForEach(Array(matches.dropFirst())) { task in
                                 Button { store.start(task) } label: {
-                                    choice("·", title: task.title, detail: task.project.isEmpty ? "Start existing task" : task.project)
+                                    choice("·", title: task.title, detail: task.project.isEmpty ? "Start existing task" : task.project, task: task)
                                 }.buttonStyle(.plain)
                             }
                         }
@@ -78,13 +78,14 @@ struct SearchChoicesView: View {
         .task(id: request?.id) { await runSearch() }
     }
 
-    private func choice(_ key: String, title: String, detail: String) -> some View {
+    private func choice(_ key: String, title: String, detail: String, task: WorkTask? = nil) -> some View {
         HStack(spacing: 12) {
             Text(key).font(.custom("Inter", size: 12)).frame(width: 26, height: 26)
                 .background(Color.primary.opacity(0.07), in: RoundedRectangle(cornerRadius: 6))
             VStack(alignment: .leading, spacing: 4) {
                 Text(title).font(.custom("Inter", size: 13)).lineLimit(2)
                 Text(detail).font(.custom("Inter", size: 10)).foregroundStyle(.secondary)
+                if let task { TaskPropertiesView(store: store, task: task, compact: true) }
             }
             Spacer(minLength: 0)
         }.padding(12).frame(maxWidth: .infinity, alignment: .leading)

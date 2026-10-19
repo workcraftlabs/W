@@ -71,7 +71,7 @@ public struct NotionClient {
             let props = page["properties"] as? [String: [String: Any]] ?? [:]
             let projectID = (props[settings.projectProperty]?["relation"] as? [[String: Any]])?.first?["id"] as? String
             let status = (props[settings.statusProperty]?[settings.statusType] as? [String: Any])?["name"] as? String
-            tasks.append(WorkTask(id: id, title: title(props[settings.titleProperty] ?? [:]), projectID: projectID, project: projects.first { $0.id == projectID }?.title ?? "", done: status == settings.done, remote: true))
+            tasks.append(WorkTask(id: id, title: title(props[settings.titleProperty] ?? [:]), projectID: projectID, project: projects.first { $0.id == projectID }?.title ?? "", done: status == settings.done, remote: true, properties: TaskProperty.parse(props)))
         }
         return (tasks, projects)
     }
@@ -80,7 +80,7 @@ public struct NotionClient {
         if let project { properties[settings.projectProperty] = ["relation": [["id": project.id]]] }
         let page = try await request("pages", method: "POST", body: ["parent": ["type": "data_source_id", "data_source_id": settings.taskSource], "properties": properties])
         guard let id = page["id"] as? String else { throw NotionError("Notion did not return the new task ID. Refresh before trying again.") }
-        return WorkTask(id: id, title: title, projectID: project?.id, project: project?.title ?? "", remote: true)
+        return WorkTask(id: id, title: title, projectID: project?.id, project: project?.title ?? "", remote: true, properties: TaskProperty.parse(page["properties"] as? [String: [String: Any]] ?? [:]))
     }
     public func apply(_ update: PendingUpdate) async throws {
         let s = update.settings

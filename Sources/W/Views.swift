@@ -35,6 +35,7 @@ struct IslandView: View {
                         Button(action: dock) { Image(systemName: "rectangle.topthird.inset.filled") }.buttonStyle(.plain).help("Dock at top of current screen")
                     }.foregroundStyle(.secondary)
                     TaskTitleView(task: session.task, compact: false)
+                    TaskPropertiesView(store: store, task: session.task)
                     Text(session.task.project.isEmpty ? (session.task.remote ? "Notion task" : "Local task") : session.task.project).foregroundStyle(.secondary)
                     Text(store.timeText).font(.custom("Inter", size: 60)).fontWeight(.light).monospacedDigit().contentTransition(.numericText())
                     HStack {
@@ -150,6 +151,8 @@ struct SettingsView: View {
                 Text("The start date field records the latest session start. Full session history stays on this Mac.").font(.custom("Inter", size: 10)).foregroundStyle(.secondary)
                 Button(store.busy ? "Connecting…" : "Connect / refresh tasks") { Task { await store.connect() } }.buttonStyle(PillStyle(primary: true)).disabled(store.busy || store.syncing || store.state.settings.taskSource.isEmpty)
                 Divider()
+                TaskPropertySettings(store: store)
+                Divider()
                 Toggle("Check in after 25 minutes", isOn: $store.state.checkIns).onChange(of: store.state.checkIns) { _, _ in store.save() }
                 Picker("More time", selection: $store.state.extensionMinutes) { ForEach([5, 10, 15], id: \.self) { Text("\($0) minutes").tag($0) } }.onChange(of: store.state.extensionMinutes) { _, _ in store.save() }
                 Text("Shortcut: ⌃⌥W · Drag the panel to place it anywhere. Sleep pauses tracking automatically.").font(.custom("Inter", size: 11)).foregroundStyle(.secondary)
@@ -183,6 +186,7 @@ struct PanelRoot: View {
                         Spacer()
                         Button { store.compact = false } label: { Image(systemName: "arrow.up.left.and.arrow.down.right") }.help("Expand timer")
                     }
+                    TaskPropertiesView(store: store, task: session.task, compact: true)
                     HStack(spacing: 16) {
                         Text(store.timeText).font(.custom("Inter", size: 28)).fontWeight(.light).foregroundStyle(accent)
                         Spacer()
@@ -192,7 +196,7 @@ struct PanelRoot: View {
                     }
                     if store.checkIn { Button("Time to check in →") { store.compact = false }.font(.custom("Inter", size: 11)).foregroundStyle(accent) }
                     else if !store.state.pending.isEmpty { Text("Notion sync pending · expand for details").font(.custom("Inter", size: 9)).foregroundStyle(.secondary) }
-                }.buttonStyle(.plain).padding(20).frame(width: 360, height: 145)
+                }.buttonStyle(.plain).padding(20).frame(width: 360, height: 185)
                     .background(surface, in: RoundedRectangle(cornerRadius: 16))
                     .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(Color.primary.opacity(0.12)))
 

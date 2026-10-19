@@ -7,8 +7,9 @@ public struct WorkTask: Identifiable, Codable, Equatable {
     public var project: String
     public var done: Bool
     public var remote: Bool
-    public init(id: String = UUID().uuidString, title: String, projectID: String? = nil, project: String = "", done: Bool = false, remote: Bool = false) {
-        self.id = id; self.title = title; self.projectID = projectID; self.project = project; self.done = done; self.remote = remote
+    public var properties: [TaskProperty]?
+    public init(id: String = UUID().uuidString, title: String, projectID: String? = nil, project: String = "", done: Bool = false, remote: Bool = false, properties: [TaskProperty]? = nil) {
+        self.id = id; self.title = title; self.projectID = projectID; self.project = project; self.done = done; self.remote = remote; self.properties = properties
     }
 }
 public extension WorkTask {

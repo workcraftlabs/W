@@ -74,3 +74,7 @@ Open Settings → **Continue with ChatGPT**. W opens OpenAI authorization in you
 W supports multiple saved account/workspace registrations, account switching, reauthorization, token renewal, and sign-out with attempted remote revocation. OAuth tokens are stored in Keychain. It uses PKCE, fresh state/nonce, a stable per-install host ID, signature-verified OIDC identity, and the issued client ID. It never reads another app's credentials. AI cannot call tools or write to Notion. Invalid IDs, incomplete streams, and usage failures fall back to local matching. Manage plan limits at https://chatgpt.com/settings/usage.
 
 This is the official open-source/local-app sign-in flow, subject to account eligibility and current preview limits. Actual account authorization and live inference require the person using W to complete browser consent; they are not covered by offline automated checks. ChatGPT history and existing connectors are not imported. Vercel remains the static website host, with no OpenAI tokens on the website.
+
+### Task details
+
+After refreshing Notion tasks, open Settings → Task details → Visible properties to choose up to four properties for search results and both timer views. Due and Time Est (or similarly named estimates) appear by default. Choices are saved per database using stable Notion property IDs. Displayed values are read-only cached previews; refresh tasks to update them. Dates, numbers, selections, people, text, checkboxes, formulas and rollups are supported. Blank values show a dash.

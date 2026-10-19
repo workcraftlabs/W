@@ -112,7 +112,7 @@ final class IslandPanel: NSPanel { override var canBecomeKey: Bool { true }; ove
     }
     func resize(_ compact: Bool) {
         let old = panel.frame
-        let size = compact ? NSSize(width: 360, height: 145) : NSSize(width: 440, height: 570)
+        let size = compact ? NSSize(width: 360, height: 185) : NSSize(width: 440, height: 570)
         panel.setFrame(NSRect(x: old.midX - size.width / 2, y: old.maxY - size.height, width: size.width, height: size.height), display: true, animate: !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)
     }
     func dock() {
