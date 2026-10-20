@@ -8,8 +8,9 @@ public struct WorkTask: Identifiable, Codable, Equatable {
     public var done: Bool
     public var remote: Bool
     public var properties: [TaskProperty]?
-    public init(id: String = UUID().uuidString, title: String, projectID: String? = nil, project: String = "", done: Bool = false, remote: Bool = false, properties: [TaskProperty]? = nil) {
-        self.id = id; self.title = title; self.projectID = projectID; self.project = project; self.done = done; self.remote = remote; self.properties = properties
+    public var status: String?
+    public init(id: String = UUID().uuidString, title: String, projectID: String? = nil, project: String = "", done: Bool = false, remote: Bool = false, status: String? = nil, properties: [TaskProperty]? = nil) {
+        self.id = id; self.title = title; self.projectID = projectID; self.project = project; self.done = done; self.remote = remote; self.properties = properties; self.status = status
     }
 }
 public extension WorkTask {
@@ -26,7 +27,8 @@ public extension WorkTask {
 public struct Project: Identifiable, Codable, Equatable {
     public var id: String
     public var title: String
-    public init(id: String, title: String) { self.id = id; self.title = title }
+    public var inProgress: Bool?
+    public init(id: String, title: String, inProgress: Bool? = nil) { self.id = id; self.title = title; self.inProgress = inProgress }
 }
 public struct WorkSession: Identifiable, Codable, Equatable {
     public var id = UUID()
@@ -36,6 +38,11 @@ public struct WorkSession: Identifiable, Codable, Equatable {
     public var accumulated: TimeInterval = 0
     public var endedAt: Date?
     public var completed = false
+    public var intervalMinutes: Int?
+    public var awaitingDecision: Bool?
+    public var scheduledStart: Date?
+    public var scheduledEnd: Date?
+    public var notionSettings: NotionSettings?
     public var checkInAt: TimeInterval? = 25 * 60
     public init(task: WorkTask, now: Date = Date()) { self.task = task; startedAt = now; runningSince = now }
     public func elapsed(at now: Date = Date()) -> TimeInterval { accumulated + (runningSince.map { max(0, now.timeIntervalSince($0)) } ?? 0) }
@@ -54,6 +61,7 @@ public struct NotionSettings: Codable, Equatable {
     public var done = "Done"
     public var projectProperty = "Project"
     public var startProperty = ""
+    public var sessionDateProperty: String?
     public init() {}
 }
 public struct PendingUpdate: Identifiable, Codable {
@@ -61,8 +69,10 @@ public struct PendingUpdate: Identifiable, Codable {
     public var pageID: String
     public var status: String
     public var start: Date?
+    public var dateValue: SessionDate?
+    public var projectID: String?
     public var settings: NotionSettings
-    public init(pageID: String, status: String, start: Date? = nil, settings: NotionSettings) { self.pageID = pageID; self.status = status; self.start = start; self.settings = settings }
+    public init(pageID: String, status: String, start: Date? = nil, settings: NotionSettings, dateValue: SessionDate? = nil, projectID: String? = nil) { self.pageID = pageID; self.status = status; self.start = start; self.settings = settings; self.dateValue = dateValue; self.projectID = projectID }
 }
 public struct SavedState: Codable {
     public var tasks: [WorkTask] = []
@@ -73,6 +83,7 @@ public struct SavedState: Codable {
     public var settings = NotionSettings()
     public var validatedSettings: NotionSettings?
     public var notionVerification: NotionVerification?
+    public var focusMinutes: Int?
     public var extensionMinutes = 5
     public var checkIns = true
     public init() {}

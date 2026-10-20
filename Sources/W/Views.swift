@@ -26,7 +26,8 @@ struct IslandView: View {
             }.buttonStyle(.plain)
             if store.showSettings { SettingsView(store: store) }
             else if let session = store.state.active {
-                VStack(alignment: .leading, spacing: 16) {
+                ScrollView(.vertical) {
+                VStack(alignment: .leading, spacing: 14) {
                     HStack(spacing: 7) {
                         Circle().fill(session.runningSince == nil ? Color.secondary : accent).frame(width: 6, height: 6)
                         Text(session.runningSince == nil ? "PAUSED" : "IN PROGRESS").font(.custom("Inter", size: 10)).fontWeight(.medium).tracking(0.5)
@@ -35,24 +36,9 @@ struct IslandView: View {
                         Button(action: dock) { Image(systemName: "rectangle.topthird.inset.filled") }.buttonStyle(.plain).help("Dock at top of current screen")
                     }.foregroundStyle(.secondary)
                     TaskTitleView(task: session.task, compact: false)
-                    TaskPropertiesView(store: store, task: session.task)
-                    Text(session.task.project.isEmpty ? (session.task.remote ? "Notion task" : "Local task") : session.task.project).foregroundStyle(.secondary)
-                    Text(store.timeText).font(.custom("Inter", size: 60)).fontWeight(.light).monospacedDigit().contentTransition(.numericText())
-                    HStack {
-                        Button(session.runningSince == nil ? "Resume" : "Pause") { session.runningSince == nil ? store.resume() : store.pause() }.buttonStyle(PillStyle())
-                        Button("Done", systemImage: "checkmark") { store.stop(done: true) }.buttonStyle(PillStyle(primary: true))
-                    }
-                    if store.checkIn {
-                        Text("You've made time. What's next?").font(.custom("Inter", size: 13)).fontWeight(.semibold)
-                        HStack {
-                            Button("+\(store.state.extensionMinutes) min") { store.extend() }
-                            Button("Keep going") { store.keepGoing() }
-                        }.buttonStyle(PillStyle())
-                    } else {
-                        Button("+\(store.state.extensionMinutes) min until next check-in") { store.extend() }.buttonStyle(.plain).foregroundStyle(.secondary)
-                    }
-                    Button("Stop for now") { store.stop(done: false) }.buttonStyle(.plain).foregroundStyle(.secondary)
-                }
+                    SessionTimerContents(store: store, compact: false)
+                }.frame(maxWidth: .infinity, alignment: .leading).padding(.bottom, 2)
+                }.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             } else if creating {
                 NewTaskForm(store: store, title: $newTitle, projectID: $projectID) { creating = false }
             } else {
@@ -156,6 +142,10 @@ struct SettingsView: View {
                     Picker("Project relation", selection: $store.state.settings.projectProperty) {
                         ForEach(Array(Set(schema.relations + [store.state.settings.projectProperty])).sorted(), id: \.self) { Text($0).tag($0) }
                     }
+                    Picker("Session Due / Date field", selection: Binding(get: { store.state.settings.sessionDateProperty ?? "" }, set: { store.state.settings.sessionDateProperty = $0 })) {
+                        Text("None").tag("")
+                        ForEach(schema.dates, id: \.self) { Text($0).tag($0) }
+                    }
                     Picker("Start date field", selection: $store.state.settings.startProperty) {
                         Text("None").tag("")
                         ForEach(schema.dates, id: \.self) { Text($0).tag($0) }
@@ -169,9 +159,11 @@ struct SettingsView: View {
                         field("In-progress value", text: $store.state.settings.inProgress)
                         field("Done value", text: $store.state.settings.done)
                         field("Project relation field", text: $store.state.settings.projectProperty)
+                        field("Session Due / Date field", text: Binding(get: { store.state.settings.sessionDateProperty ?? "" }, set: { store.state.settings.sessionDateProperty = $0 }))
                         field("Start date field (optional)", text: $store.state.settings.startProperty)
                     }
                 }
+                Text("Session dates start at the previous 5-minute mark. Stop resets the chosen field to today without a time.").font(.custom("Inter", size: 10)).foregroundStyle(.secondary)
                 Text("The start date field records the latest session start. Full session history stays on this Mac.").font(.custom("Inter", size: 10)).foregroundStyle(.secondary)
                 Button(store.busy ? "Connecting…" : "Verify connection & refresh") { Task { await store.connect() } }.buttonStyle(PillStyle(primary: true)).disabled(store.busy || store.syncing || store.state.settings.taskSource.isEmpty)
                 if !store.notionConnectionMessage.isEmpty {
@@ -189,8 +181,11 @@ struct SettingsView: View {
                 Divider()
                 TaskPropertySettings(store: store)
                 Divider()
-                Toggle("Check in after 25 minutes", isOn: $store.state.checkIns).onChange(of: store.state.checkIns) { _, _ in store.save() }
-                Picker("More time", selection: $store.state.extensionMinutes) { ForEach([5, 10, 15], id: \.self) { Text("\($0) minutes").tag($0) } }.onChange(of: store.state.extensionMinutes) { _, _ in store.save() }
+                Toggle("Notify when the interval ends", isOn: $store.state.checkIns).onChange(of: store.state.checkIns) { _, _ in store.save() }
+                Picker("Default interval", selection: Binding(get: { store.defaultInterval }, set: { store.state.focusMinutes = $0; store.save() })) {
+                    ForEach(SessionTiming.intervals, id: \.self) { Text("\($0) minutes").tag($0) }
+                }
+                Text("The timer pauses at each interval. Keep going adds another interval; Stop keeps the task In Progress.").font(.custom("Inter", size: 11)).foregroundStyle(.secondary)
                 Text("Shortcut: ⌃⌥W · Drag the panel to place it anywhere. Sleep pauses tracking automatically.").font(.custom("Inter", size: 11)).foregroundStyle(.secondary)
                 if !store.state.sessions.isEmpty {
                     Divider(); Text("Recent sessions").font(.custom("Inter", size: 13)).fontWeight(.semibold)
@@ -222,24 +217,16 @@ struct PanelRoot: View {
     var body: some View {
         Group {
             if isCompact, let session = store.state.active {
-                VStack(spacing: 14) {
+                VStack(spacing: 8) {
                     HStack {
                         Circle().fill(session.runningSince == nil ? Color.secondary : accent).frame(width: 6, height: 6)
                         TaskTitleView(task: session.task, compact: true)
                         Spacer()
                         Button { store.compact = false } label: { Image(systemName: "arrow.up.left.and.arrow.down.right") }.help("Expand timer")
                     }
-                    TaskPropertiesView(store: store, task: session.task, compact: true)
-                    HStack(spacing: 16) {
-                        Text(store.timeText).font(.custom("Inter", size: 28)).fontWeight(.light).foregroundStyle(accent)
-                        Spacer()
-                        Button { session.runningSince == nil ? store.resume() : store.pause() } label: { Image(systemName: session.runningSince == nil ? "play.fill" : "pause.fill") }.help(session.runningSince == nil ? "Resume" : "Pause")
-                        Button { store.extend() } label: { Text("+\(store.state.extensionMinutes)m").font(.custom("Inter", size: 11)) }.help("More time")
-                        Button { store.stop(done: true) } label: { Image(systemName: "checkmark") }.help("Mark done")
-                    }
-                    if store.checkIn { Button("Time to check in →") { store.compact = false }.font(.custom("Inter", size: 11)).foregroundStyle(accent) }
-                    else if !store.state.pending.isEmpty { Text("Notion sync pending · expand for details").font(.custom("Inter", size: 9)).foregroundStyle(.secondary) }
-                }.buttonStyle(.plain).padding(20).frame(width: 360, height: 185)
+                    SessionTimerContents(store: store, compact: true)
+                    if !store.state.pending.isEmpty && !store.checkIn { Text("Notion sync pending").font(.custom("Inter", size: 9)).foregroundStyle(.secondary) }
+                }.buttonStyle(.plain).padding(20).frame(width: 360, height: 220)
                     .background(surface, in: RoundedRectangle(cornerRadius: 16))
                     .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(Color.primary.opacity(0.12)))
 

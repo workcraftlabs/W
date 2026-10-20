@@ -40,6 +40,7 @@ public struct NotionClient {
         let status = props[settings.statusProperty]?[settings.statusType] as? [String: Any]
         let names = (status?["options"] as? [[String: Any]] ?? []).compactMap { $0["name"] as? String }
         guard names.contains(settings.inProgress), names.contains(settings.done) else { throw NotionError("Status values are case-sensitive. Set In-progress and Done to exact options from: \(names.joined(separator: ", ")).") }
+        if let dateField = settings.sessionDateProperty, !dateField.isEmpty, props[dateField]?["type"] as? String != "date" { throw NotionError("Choose an existing Due / Date field for sessions in Settings.") }
         if !settings.startProperty.isEmpty, props[settings.startProperty]?["type"] as? String != "date" { throw NotionError("Start time property must be a date field.") }
         if !settings.projectSource.isEmpty {
             guard props[settings.projectProperty]?["type"] as? String == "relation" else { throw NotionError("Project property must be a relation.") }
@@ -64,26 +65,33 @@ public struct NotionClient {
     }
     public func fetch(_ settings: NotionSettings) async throws -> ([WorkTask], [Project]) {
         try await validate(settings)
-        var projects: [Project] = []
-        if !settings.projectSource.isEmpty {
-            for page in try await allPages(settings.projectSource) {
-                let props = page["properties"] as? [String: [String: Any]] ?? [:]
-                let name = props.values.first { $0["type"] as? String == "title" }.map(title) ?? "Untitled"
-                if let id = page["id"] as? String { projects.append(Project(id: id, title: name)) }
-            }
-        }
+        let projects = try await fetchProjects(settings)
         var tasks: [WorkTask] = []
         for page in try await allPages(settings.taskSource) {
             guard let id = page["id"] as? String else { continue }
             let props = page["properties"] as? [String: [String: Any]] ?? [:]
             let projectID = (props[settings.projectProperty]?["relation"] as? [[String: Any]])?.first?["id"] as? String
             let status = (props[settings.statusProperty]?[settings.statusType] as? [String: Any])?["name"] as? String
-            tasks.append(WorkTask(id: id, title: title(props[settings.titleProperty] ?? [:]), projectID: projectID, project: projects.first { $0.id == projectID }?.title ?? "", done: status == settings.done, remote: true, properties: TaskProperty.parse(props)))
+            tasks.append(WorkTask(id: id, title: title(props[settings.titleProperty] ?? [:]), projectID: projectID, project: projects.first { $0.id == projectID }?.title ?? "", done: status == settings.done, remote: true, status: status, properties: TaskProperty.parse(props)))
         }
         return (tasks, projects)
     }
+    public func fetchProjects(_ settings: NotionSettings) async throws -> [Project] {
+        guard !settings.projectSource.isEmpty else { return [] }
+        let schema = try await request("data_sources/\(settings.projectSource)")
+        let rule = ProjectProgress(properties: schema["properties"] as? [String: [String: Any]] ?? [:])
+        return try await allPages(settings.projectSource).compactMap { page in
+            guard let id = page["id"] as? String else { return nil }
+            let props = page["properties"] as? [String: [String: Any]] ?? [:]
+            let name = props.values.first { $0["type"] as? String == "title" }.map(title) ?? "Untitled"
+            return Project(id: id, title: name, inProgress: rule.contains(props))
+        }
+    }
     public func create(title: String, project: Project?, settings: NotionSettings, values: [String: CreationValue] = [:]) async throws -> WorkTask {
-        let fields = values.isEmpty ? [] : try await creationFields(settings)
+        let allFields = values.isEmpty ? [] : try await creationFields(settings)
+        let managed = allFields.filter { $0.name == settings.sessionDateProperty }.map(\.id)
+        let values = values.filter { !managed.contains($0.key) }
+        let fields = allFields
         let peopleIDs = fields.filter { $0.type == "people" }.flatMap { values[$0.id]?.options ?? [] }
         if !peopleIDs.isEmpty {
             let members = try await people()
@@ -91,15 +99,13 @@ public struct NotionClient {
         }
         var properties = try CreationField.payload(fields: fields, values: values)
         properties[settings.titleProperty] = ["title": [["text": ["content": title]]]]
+        properties.merge(SessionTiming.creationProperties(settings: settings)) { _, managed in managed }
         if let project { properties[settings.projectProperty] = ["relation": [["id": project.id]]] }
         let page = try await request("pages", method: "POST", body: ["parent": ["type": "data_source_id", "data_source_id": settings.taskSource], "properties": properties])
         guard let id = page["id"] as? String else { throw NotionError("Notion did not return the new task ID. Refresh before trying again.") }
         return WorkTask(id: id, title: title, projectID: project?.id, project: project?.title ?? "", remote: true, properties: TaskProperty.parse(page["properties"] as? [String: [String: Any]] ?? [:]))
     }
     public func apply(_ update: PendingUpdate) async throws {
-        let s = update.settings
-        var properties: [String: Any] = [s.statusProperty: [s.statusType: ["name": update.status]]]
-        if let start = update.start, !s.startProperty.isEmpty { properties[s.startProperty] = ["date": ["start": ISO8601DateFormatter().string(from: start)]] }
-        _ = try await request("pages/\(update.pageID)", method: "PATCH", body: ["properties": properties])
+        _ = try await request("pages/\(update.pageID)", method: "PATCH", body: ["properties": update.properties])
     }
 }

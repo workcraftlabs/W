@@ -78,6 +78,7 @@ import Security
         count += try CreationFieldChecks.run()
         count += try AssigneeChecks.run()
         count += try VerificationChecks.run()
+        count += try SessionTimingChecks.run()
         print("\(count) checks passed.")
     }
 }

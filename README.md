@@ -32,7 +32,7 @@ Notion API version: `2025-09-03`. One task data source and one optional project 
 - On-device speech transcription when supported by your language/device; typing always works. W does not fall back silently to cloud audio processing.
 - Local keyword/fuzzy matching across titles and project names. Completed tasks are excluded. Every match requires selection; unmatched input never creates a task automatically.
 - Explicit task creation with an editable title and optional chosen project. Without Notion configured, tasks stay local.
-- Exact elapsed time, pause/resume, Done, Stop for now, 25-minute check-ins, and 5/10/15-minute extensions.
+- Exact elapsed time, pause/resume, Done, and configurable focus intervals with Keep going / Stop decisions.
 - Session history and ordered, durable Notion status-update queue. Failed updates remain pending with a visible Retry action. Notion updates run when you start/finish, reconnect, or retry; there is no silent background retry loop.
 - Sleep pauses tracking. Recovery after a crash uses the last saved heartbeat and requires Resume.
 
@@ -81,8 +81,18 @@ After refreshing Notion tasks, open Settings → Task details → Visible proper
 
 ### New-task fields
 
-Settings → New task fields controls the editable fields shown before creation, independently of the read-only timer details. Text and numeric properties use inputs; select and multi-select use the existing database options. Enable Default to today on individual date fields to prefill the current local date on each new form. You can change or clear that date before saving. Formulas, rollups, and system fields are excluded. Title/project remain built-in and W manages status. Press 2 to review the new task, then Create & start saves its entered properties and starts the timer. Blank fields are omitted so Notion defaults remain intact.
+Settings → New task fields controls the editable fields shown before creation, independently of the read-only timer details. Text and numeric properties use inputs; select and multi-select use the existing database options. Enable Default to today on individual date fields to prefill the current local date on each new form. You can change or clear that date before saving. Formulas, rollups, and system fields are excluded. Title/project remain built-in and W manages status. Choose Edit new task details to review the new task, then Create & start saves its entered properties and starts the timer. Blank fields are omitted so Notion defaults remain intact.
 
 ### Default assignee
 
 Settings → New task fields → Default assignee lets you choose a People property and a workspace member per task database. Members are loaded from Notion; bot accounts are excluded, and email addresses distinguish duplicate names. The selection prefills new-task forms and can be changed or cleared for one task. The integration needs permission to read user information. Notion’s Created by remains the integration and cannot be changed through this preference.
+
+### Focus intervals and session dates
+
+Settings → Default interval offers 15, 25, 30, 24, 50, and 60 minutes (25 by default). Settings → Notion → Session Due / Date field selects the date property W manages; verification initially prefers Due, then Date. After changing the field, verify the connection again.
+
+Press 0 in search results to create and start. Creation writes today's date and In Progress together. Starting the timer turns the selected date into a range: the start rounds down to the previous five-minute mark, while the end is the actual start plus the full chosen interval. For example, starting a 25-minute session at 6:42 records 6:40–7:07.
+
+At the boundary, the stopwatch pauses and presents Keep going and Stop. Keep going resumes for another interval and extends the end time, including any time spent deciding. Stop leaves the task In Progress and replaces the range with today's date without a time. Mark done remains a separate action while the timer is running. Changes use the persisted retry queue if Notion is unavailable.
+
+The running timer includes a project picker. Only projects in the Notion In Progress status group (or a select value named In Progress) are selectable; a currently assigned inactive project remains visible but disabled. Refresh the Notion connection to update the project list.

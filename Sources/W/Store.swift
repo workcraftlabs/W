@@ -66,7 +66,8 @@ import UserNotifications
         if state.active != nil {
             // Recovery never counts unattended time after the last durable heartbeat.
             state.active?.runningSince = nil
-            message = "Recovered your session, paused. Resume when ready."
+            checkIn = state.active?.awaitingDecision == true
+            message = checkIn ? "Interval finished. Keep going or stop." : "Recovered your session, paused. Resume when ready."
             save()
         }
         restoringState = false
@@ -99,15 +100,16 @@ import UserNotifications
     func tick() {
         now = Date()
         if state.active?.runningSince != nil {
-            state.active?.accumulated = elapsed
-            state.active?.runningSince = now
-            if state.checkIns, let target = state.active?.checkInAt, elapsed >= target {
-                state.active?.checkInAt = nil; checkIn = true
+            if state.active?.reachInterval(at: now) == true {
+                checkIn = true
                 let content = UNMutableNotificationContent()
-                content.title = "Time for a check-in"
-                content.body = "Done, taking a break, or need more time? Your timer is still running."
+                content.title = "Your focus interval is complete"
+                content.body = "The stopwatch is paused. Keep going or stop for now."
                 content.sound = .default
-                UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil))
+                if state.checkIns { UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)) }
+            } else {
+                state.active?.accumulated = elapsed
+                state.active?.runningSince = now
             }
             save()
         }
@@ -115,26 +117,47 @@ import UserNotifications
     func start(_ task: WorkTask) {
         guard state.active == nil, persistenceOK else { return }
         if task.remote && verifiedSettings != state.settings { message = "Refresh and validate Settings before starting a Notion task."; return }
-        let session = WorkSession(task: task)
+        var task = task
+        task.status = state.settings.inProgress
+        if let index = state.tasks.firstIndex(where: { $0.id == task.id }) { state.tasks[index].status = task.status }
+        var session = WorkSession(task: task)
+        session.configure(minutes: defaultInterval, settings: state.settings)
         state.active = session; query = ""; now = Date(); checkIn = false; compact = true
-        if task.remote { state.pending.append(PendingUpdate(pageID: task.id, status: state.settings.inProgress, start: session.startedAt, settings: state.settings)) }
+        if task.remote { state.pending.append(PendingUpdate(pageID: task.id, status: state.settings.inProgress, start: session.scheduledStart, settings: state.settings, dateValue: session.sessionDate)) }
+        if let date = session.sessionDate { updateCachedDate(taskID: task.id, date: date, settings: state.settings) }
         save()
         if state.checkIns { UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in } }
         Task { await flush() }
     }
     func pause() { state.active?.pause(); save() }
-    func resume() { state.active?.resume(); save() }
+    func resume() {
+        if checkIn { keepGoing(); return }
+        state.active?.resume()
+        if let target = state.active?.checkInAt { state.active?.scheduledEnd = Date().addingTimeInterval(max(0, target - elapsed)) }
+        queueSessionDate(); save(); Task { await flush() }
+    }
     func stop(done: Bool) {
         guard var session = state.active else { return }
         session.stop(done: done); state.sessions.insert(session, at: 0); state.active = nil; checkIn = false; compact = false
+        let settings = session.notionSettings ?? state.settings
         if done {
-            if let index = state.tasks.firstIndex(where: { $0.id == session.task.id }) { state.tasks[index].done = true }
-            if session.task.remote { state.pending.append(PendingUpdate(pageID: session.task.id, status: state.settings.done, settings: state.settings)) }
+            if let index = state.tasks.firstIndex(where: { $0.id == session.task.id }) { state.tasks[index].done = true; state.tasks[index].status = state.settings.done }
+            if session.task.remote { state.pending.append(PendingUpdate(pageID: session.task.id, status: settings.done, settings: settings)) }
+        }
+        if !done, session.task.remote {
+            let date = SessionDate.today()
+            state.pending.append(PendingUpdate(pageID: session.task.id, status: settings.inProgress, settings: settings, dateValue: date))
+            updateCachedDate(taskID: session.task.id, date: date, settings: settings)
         }
         save(); Task { await flush() }
     }
-    func extend() { state.active?.extend(minutes: state.extensionMinutes); checkIn = false; save() }
-    func keepGoing() { checkIn = false; state.active?.checkInAt = nil; save() }
+    func extend() { keepGoing() }
+    func keepGoing() {
+        guard state.active != nil else { return }
+        state.active?.continueInterval()
+        now = Date(); checkIn = false
+        queueSessionDate(); save(); Task { await flush() }
+    }
     func connect(syncPending: Bool = true) async {
         guard !busy, !syncing else { return }
         if let previous = state.validatedSettings, previous != state.settings, (state.active != nil || !state.pending.isEmpty) { message = "Stop the active session and sync pending updates before changing the connection."; return }

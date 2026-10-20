@@ -20,6 +20,9 @@ public struct NotionSchema {
             statusTypes[name] = type
         }
         var result = settings
+        if result.sessionDateProperty == nil {
+            result.sessionDateProperty = dates.contains("Due") ? "Due" : (dates.contains("Date") ? "Date" : "")
+        }
         guard let title = titles.first else { throw NotionError("This data source has no title field.") }
         if !titles.contains(result.titleProperty) { result.titleProperty = title }
         if statusFields[result.statusProperty] == nil {

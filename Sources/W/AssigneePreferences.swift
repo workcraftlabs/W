@@ -25,7 +25,7 @@ extension Store {
         UserDefaults.standard.set(try JSONEncoder().encode(people), forKey: key + ".people")
     }
     var newTaskFields: [CreationField] {
-        creationFields.filter { enabledCreationIDs.contains($0.id) || ($0.id == assigneeFieldID && !defaultAssigneeID.isEmpty) }
+        creationFields.filter { $0.name != state.settings.sessionDateProperty && (enabledCreationIDs.contains($0.id) || ($0.id == assigneeFieldID && !defaultAssigneeID.isEmpty)) }
     }
 }
 

@@ -43,29 +43,35 @@ struct SearchChoicesView: View {
             if ready, let proposal {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 10) {
-                        if let first = matches.first {
-                            Button { store.start(first) } label: {
-                                choice("1", title: first.title, detail: "Start existing task" + (first.project.isEmpty ? "" : " · \(first.project)"), task: first)
-                            }.buttonStyle(.plain)
-                                .choiceShortcut("1", enabled: !editing)
-                        } else {
-                            Text("No matching task found").font(.custom("Inter", size: 13)).foregroundStyle(.secondary)
-                        }
+                        let newTask = newTaskProposal(from: proposal)
                         Button {
-                            edit(proposal)
+                            Task {
+                                var defaults: [String: CreationValue] = [:]
+                                for field in store.creationFields where field.type == "date" && store.enabledCreationIDs.contains(field.id) && store.todayCreationIDs.contains(field.id) {
+                                    var value = CreationValue()
+                                    value.date = CreationValue.dayFormatter.string(from: Date())
+                                    defaults[field.id] = value
+                                }
+                                await store.create(title: newTask.title, projectID: newTask.projectID ?? "", values: defaults)
+                            }
                         } label: {
-                            choice("2", title: proposal.title, detail: "Review & create · \(projectName(proposal.projectID))")
+                            choice("0", title: newTask.title, detail: "Create & start · \(projectName(newTask.projectID))")
                         }.buttonStyle(.plain)
-                            .choiceShortcut("2", enabled: !editing)
+                            .choiceShortcut("0", enabled: !editing)
+                        Button("Edit new task details") { edit(newTask) }
+                            .buttonStyle(.plain).font(.custom("Inter", size: 11)).foregroundStyle(.secondary)
                         if !proposal.explanation.isEmpty {
                             Text(proposal.explanation).font(.custom("Inter", size: 11)).foregroundStyle(.secondary)
                         }
-                        if matches.count > 1 {
-                            Text("OTHER MATCHES").font(.custom("Inter", size: 9)).foregroundStyle(.secondary)
-                            ForEach(Array(matches.dropFirst())) { task in
+                        if matches.isEmpty {
+                            Text("No matching tasks found").font(.custom("Inter", size: 11)).foregroundStyle(.secondary)
+                        } else {
+                            Text("USE AN EXISTING TASK").font(.custom("Inter", size: 9)).foregroundStyle(.secondary)
+                            ForEach(Array(matches.prefix(3).enumerated()), id: \.element.id) { index, task in
                                 Button { store.start(task) } label: {
-                                    choice("·", title: task.title, detail: task.project.isEmpty ? "Start existing task" : task.project, task: task)
+                                    choice(String(index + 1), title: task.title, detail: task.project.isEmpty ? "Start existing task" : task.project, task: task)
                                 }.buttonStyle(.plain)
+                                    .choiceShortcut(KeyEquivalent(Character(String(index + 1))), enabled: !editing)
                             }
                         }
                     }.disabled(store.busy || !store.persistenceOK)
@@ -89,6 +95,12 @@ struct SearchChoicesView: View {
         }.padding(12).frame(maxWidth: .infinity, alignment: .leading)
             .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 10))
             .contentShape(Rectangle())
+    }
+    private func newTaskProposal(from proposal: AIProposal) -> AIProposal {
+        // A match's title describes the existing task, not necessarily the new intention.
+        let enteredTitle = request?.query.trimmingCharacters(in: .whitespacesAndNewlines) ?? store.query
+        return AIProposal(taskID: nil, title: proposal.taskID == nil ? proposal.title : enteredTitle,
+                          projectID: proposal.projectID, explanation: proposal.explanation)
     }
     private func projectName(_ id: String?) -> String {
         store.state.projects.first { $0.id == id }?.title ?? (store.state.settings.taskSource.isEmpty ? "On this Mac" : "No project")
