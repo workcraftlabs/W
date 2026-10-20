@@ -23,7 +23,7 @@ final class IslandPanel: NSPanel { override var canBecomeKey: Bool { true }; ove
     func applicationDidFinishLaunching(_ notification: Notification) {
         let fontBundle = Bundle.main.url(forResource: "W_W", withExtension: "bundle").flatMap { Bundle(url: $0) } ?? Bundle.module
         if let font = fontBundle.url(forResource: "Inter", withExtension: "ttf") { CTFontManagerRegisterFontsForURL(font as CFURL, .process, nil) }
-        panel = IslandPanel(contentRect: NSRect(x: 0, y: 0, width: 440, height: 570), styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+        panel = IslandPanel(contentRect: NSRect(x: 0, y: 0, width: 489, height: 570), styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         panel.level = .floating; panel.isOpaque = false; panel.backgroundColor = .clear
         panel.hasShadow = true; panel.isMovableByWindowBackground = true
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
@@ -31,10 +31,13 @@ final class IslandPanel: NSPanel { override var canBecomeKey: Bool { true }; ove
         visibilitySubscription = store.$showInMenuBar.combineLatest(store.$showInDock)
             .sink { [weak self] menuBar, dock in self?.updateVisibility(menuBar: menuBar, dock: dock) }
         var event = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
-        InstallEventHandler(GetApplicationEventTarget(), { _, _, context in
-            guard let context else { return noErr }
+        InstallEventHandler(GetApplicationEventTarget(), { _, event, context in
+            guard let context, let event else { return noErr }
             let delegate = Unmanaged<AppDelegate>.fromOpaque(context).takeUnretainedValue()
-            Task { @MainActor in delegate.toggle() }; return noErr
+            var identifier = EventHotKeyID()
+            guard GetEventParameter(event, EventParamName(kEventParamDirectObject), EventParamType(typeEventHotKeyID), nil, MemoryLayout<EventHotKeyID>.size, nil, &identifier) == noErr else { return noErr }
+            let id = identifier.id
+            Task { @MainActor in delegate.openShortcut(id) }; return noErr
         }, 1, &event, Unmanaged.passUnretained(self).toOpaque(), &handler)
         for (index, key) in [kVK_ANSI_W, kVK_ANSI_N, kVK_ANSI_J].enumerated() {
             var reference: EventHotKeyRef?
@@ -109,6 +112,15 @@ final class IslandPanel: NSPanel { override var canBecomeKey: Bool { true }; ove
             }
         }
     }
+    func openShortcut(_ id: UInt32) {
+        guard !transitioning else { return }
+        let route: WNavigation = id == 2 ? .notes : (id == 3 ? .journal : .tasks)
+        if panel.isVisible && store.navigation == route && !store.compact { hide(); return }
+        store.compact = false
+        store.navigation = route
+        resize(false)
+        show()
+    }
     @objc func toggle() { panel.isVisible ? hide() : show() }
     private func anchoredFrame(size: NSSize) -> NSRect {
         let screen = NSScreen.screens.first { NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) } ?? NSScreen.main
@@ -120,8 +132,8 @@ final class IslandPanel: NSPanel { override var canBecomeKey: Bool { true }; ove
     }
     func resize(_ compact: Bool) {
         let old = panel.frame
-        let size = compact ? NSSize(width: 360, height: 220) : NSSize(width: 440, height: 570)
-        panel.setFrame(NSRect(x: old.midX - size.width / 2, y: old.maxY - size.height, width: size.width, height: size.height), display: true, animate: !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)
+        let size = compact ? NSSize(width: 360, height: 220) : NSSize(width: 489, height: 570)
+        panel.setFrame(NSRect(x: old.midX - size.width / 2, y: old.maxY - size.height, width: size.width, height: size.height), display: true, animate: panel.isVisible && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)
     }
     func dock() {
         let screen = NSScreen.screens.first { NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) } ?? NSScreen.main

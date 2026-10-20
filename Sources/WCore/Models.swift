@@ -83,6 +83,9 @@ public struct SavedState: Codable {
     public var settings = NotionSettings()
     public var validatedSettings: NotionSettings?
     public var notionVerification: NotionVerification?
+    public var captureDestinations: [String: CaptureDestination]?
+    public var captureDrafts: [String: CaptureDraft]?
+    public var captureRecords: [CaptureRecord]?
     public var focusMinutes: Int?
     public var extensionMinutes = 5
     public var checkIns = true

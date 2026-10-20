@@ -79,6 +79,7 @@ import Security
         count += try AssigneeChecks.run()
         count += try VerificationChecks.run()
         count += try SessionTimingChecks.run()
+        count += try CaptureChecks.run()
         print("\(count) checks passed.")
     }
 }

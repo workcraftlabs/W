@@ -19,12 +19,14 @@ struct IslandView: View {
             HStack {
                 Text("W").font(.custom("Inter", size: 19)).fontWeight(.heavy).foregroundStyle(accent)
                 Spacer()
-                Text(store.state.active == nil ? "FOCUS" : "SESSION").font(.custom("Inter", size: 9)).fontWeight(.semibold).tracking(0.5).foregroundStyle(.secondary)
+                Text(store.navigation == .tasks ? (store.state.active == nil ? "FOCUS" : "SESSION") : store.navigation.title.uppercased()).font(.custom("Inter", size: 9)).fontWeight(.semibold).tracking(0.5).foregroundStyle(.secondary)
                 Spacer()
-                Button { speech.stop(); store.showSettings.toggle() } label: { Image(systemName: "slider.horizontal.3") }.help("Settings")
                 Button { speech.stop(); hide() } label: { Image(systemName: "minus") }.help("Hide · ⌃⌥W to reopen")
             }.buttonStyle(.plain)
             if store.showSettings { SettingsView(store: store) }
+            else if store.navigation == .history { CompletionHistoryView(store: store) }
+            else if store.navigation == .notes { CaptureEditorView(store: store, kind: .notes) }
+            else if store.navigation == .journal { CaptureEditorView(store: store, kind: .journal) }
             else if let session = store.state.active {
                 ScrollView(.vertical) {
                 VStack(alignment: .leading, spacing: 14) {
@@ -64,8 +66,8 @@ struct IslandView: View {
                 if !speech.error.isEmpty { Text(speech.error).font(.custom("Inter", size: 11)).foregroundStyle(.secondary) }
 
             }
-            Spacer(minLength: 0)
-            if !store.message.isEmpty { Text(store.message).font(.custom("Inter", size: 11)).foregroundStyle(.secondary).lineLimit(3).textSelection(.enabled) }
+            if store.state.active == nil && store.navigation == .tasks { Spacer(minLength: 0) }
+            if !store.message.isEmpty && store.navigation == .tasks { Text(store.message).font(.custom("Inter", size: 11)).foregroundStyle(.secondary).lineLimit(3).textSelection(.enabled) }
             HStack {
                 Circle().fill(store.state.pending.isEmpty ? accent : Color.secondary).frame(width: 5, height: 5)
                 Text(store.state.pending.isEmpty ? (store.state.settings.taskSource.isEmpty ? "LOCAL MODE" : store.notionStatusLabel) : "\(store.state.pending.count) UPDATES PENDING").font(.custom("Inter", size: 9)).tracking(1)
@@ -76,13 +78,13 @@ struct IslandView: View {
         }
         .font(.custom("Inter", size: 13))
         .padding(26).frame(width: 440, height: 570)
-        .background(surface, in: RoundedRectangle(cornerRadius: 18))
-        .overlay(RoundedRectangle(cornerRadius: 18).strokeBorder(Color.primary.opacity(0.12)))
 
         .animation(.easeInOut(duration: 0.22), value: store.state.active == nil)
         .onAppear { focused = true }
         .onChange(of: store.query) { _, _ in searchRequest = nil }
-        .onChange(of: store.showSettings) { _, _ in searchRequest = nil }
+        .onChange(of: store.navigation) { _, route in
+            speech.stop(); searchRequest = nil; focused = route == .tasks
+        }
         .onDisappear { speech.stop() }
         .onExitCommand { speech.stop(); hide() }
     }
@@ -177,6 +179,11 @@ struct SettingsView: View {
                 Text("Connection settings are saved on this Mac. W checks access automatically when it opens.")
                     .font(.custom("Inter", size: 11)).foregroundStyle(.secondary)
                 Divider()
+                Text("Capture locations").font(.custom("Inter", size: 13)).fontWeight(.semibold)
+                Text("Share each database with the same Notion integration. Notes and Journal can use separate locations.").font(.custom("Inter", size: 11)).foregroundStyle(.secondary)
+                CaptureLocationSettings(store: store, kind: .notes)
+                CaptureLocationSettings(store: store, kind: .journal)
+                Divider()
                 CreationPreferences(store: store)
                 Divider()
                 TaskPropertySettings(store: store)
@@ -213,7 +220,7 @@ struct PanelRoot: View {
     let dock: () -> Void
     let hide: () -> Void
     let resize: (Bool) -> Void
-    var isCompact: Bool { store.compact && store.state.active != nil }
+    var isCompact: Bool { store.compact && store.state.active != nil && store.navigation == .tasks }
     var body: some View {
         Group {
             if isCompact, let session = store.state.active {
@@ -230,7 +237,15 @@ struct PanelRoot: View {
                     .background(surface, in: RoundedRectangle(cornerRadius: 16))
                     .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(Color.primary.opacity(0.12)))
 
-            } else { IslandView(store: store, dock: dock, hide: hide) }
+            } else {
+                HStack(spacing: 0) {
+                    WSidebar(store: store)
+                    Rectangle().fill(Color.primary.opacity(0.07)).frame(width: 1).padding(.vertical, 16)
+                    IslandView(store: store, dock: dock, hide: hide)
+                }.frame(width: 489, height: 570)
+                    .background(surface, in: RoundedRectangle(cornerRadius: 18))
+                    .overlay(RoundedRectangle(cornerRadius: 18).strokeBorder(Color.primary.opacity(0.12)))
+            }
         }.font(.custom("Inter", size: 13)).tint(.primary).onChange(of: isCompact) { _, compact in resize(compact) }
     }
 }

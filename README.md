@@ -96,3 +96,13 @@ Press 0 in search results to create and start. Creation writes today's date and 
 At the boundary, the stopwatch pauses and presents Keep going and Stop. Keep going resumes for another interval and extends the end time, including any time spent deciding. Stop leaves the task In Progress and replaces the range with today's date without a time. Mark done remains a separate action while the timer is running: it preserves the start, rounds the completion time to the nearest five-minute mark (halfway rounds forward), and writes Done and the date range together. Changes use the persisted retry queue if Notion is unavailable.
 
 The running timer includes a project picker. Only projects in the Notion In Progress status group (or a select value named In Progress) are selectable; a currently assigned inactive project remains visible but disabled. Refresh the Notion connection to update the project list.
+
+### Sidebar, history, notes, and journal
+
+The expanded panel has an icon-only sidebar: Tasks, History, Notes, Journal, and Settings. History shows unique tasks completed in W, sorted by their latest completion; it does not infer completion dates for tasks finished elsewhere in Notion.
+
+Control–Option–W opens Tasks, Control–Option–N opens Notes, and Control–Option–J opens Journal. Capture drafts are saved on this Mac and remain intact when switching views or restarting W.
+
+In Settings → Capture locations, paste a database link or data source ID separately for Notes and Journal, then Verify location. Share each database with the same Notion integration first. W detects its title field and offers an optional date field populated with today. Multi-source databases require a specific data source ID. These locations are independent of the task database.
+
+Save to Notion creates a page with the title and body. Blank note titles use the first line; blank journal titles use today's date. Recent saves link to Notion. Failed saves preserve the draft and are never retried automatically; check Notion before retrying a timed-out creation.

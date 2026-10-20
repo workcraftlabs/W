@@ -10,7 +10,13 @@ import UserNotifications
     @Published var message = ""
     @Published var busy = false
     @Published var syncing = false
-    @Published var showSettings = false
+    @Published var navigation: WNavigation = .tasks
+    var showSettings: Bool {
+        get { navigation == .settings }
+        set { navigation = newValue ? .settings : .tasks }
+    }
+    @Published var captureBusy: CaptureKind?
+    @Published var captureMessages: [CaptureKind: String] = [:]
     @Published var now = Date()
     @Published var checkIn = false
     @Published var compact = false
