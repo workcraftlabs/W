@@ -10,6 +10,7 @@ struct NewTaskForm: View {
     @State private var loading = true
     @State private var error = ""
     var fields: [CreationField] { store.newTaskFields }
+    private var canCreate: Bool { !loading && !store.busy && store.persistenceOK && !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("New task").font(.custom("Inter", size: 27)).fontWeight(.medium)
@@ -29,18 +30,13 @@ struct NewTaskForm: View {
             }
             HStack {
                 Button("Back", action: back).buttonStyle(PillStyle())
-                Button(store.busy ? "Creating…" : "Create & start") {
-                    Task {
-                        let selected = values.filter { id, _ in fields.contains { $0.id == id } }
-                        do {
-                            _ = try CreationField.payload(fields: fields, values: selected)
-                            error = ""
-                            await store.create(title: title, projectID: projectID, values: selected)
-                        } catch { self.error = error.localizedDescription }
-                    }
-                }.buttonStyle(PillStyle(primary: true)).disabled(loading || title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                Button(store.busy ? "Creating…" : "Create & start", action: submit)
+                    .buttonStyle(PillStyle(primary: true))
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(!canCreate)
             }
         }.disabled(store.busy)
+        .onSubmit(submit)
         .task {
             do {
                 try await store.refreshCreationFields()
@@ -55,6 +51,18 @@ struct NewTaskForm: View {
             loading = false
         }
     }
+    private func submit() {
+        guard canCreate else { return }
+        Task {
+            let selected = values.filter { id, _ in fields.contains { $0.id == id } }
+            do {
+                _ = try CreationField.payload(fields: fields, values: selected)
+                error = ""
+                await store.create(title: title, projectID: projectID, values: selected)
+            } catch { self.error = error.localizedDescription }
+        }
+    }
+
     private func value(_ field: CreationField) -> Binding<CreationValue> {
         Binding(get: { values[field.id] ?? CreationValue() }, set: { values[field.id] = $0 })
     }

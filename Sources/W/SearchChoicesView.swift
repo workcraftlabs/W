@@ -34,9 +34,10 @@ struct SearchChoicesView: View {
                     Button(action: search) {
                         HStack(spacing: 5) {
                             Text(ready ? "Try again" : "Search")
-                            Image(systemName: "return").font(.system(size: 10))
+                            if !ready { Image(systemName: "return").font(.system(size: 10)) }
                         }.font(.custom("Inter", size: 11))
-                    }.buttonStyle(.plain).help("Press Enter to search")
+                    }.buttonStyle(.plain).help(ready ? "Search again" : "Press Enter to search")
+                        .defaultActionShortcut(enabled: !editing && !ready)
                         .disabled(store.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
@@ -44,20 +45,16 @@ struct SearchChoicesView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 10) {
                         let newTask = newTaskProposal(from: proposal)
-                        Button {
-                            Task {
-                                var defaults: [String: CreationValue] = [:]
-                                for field in store.creationFields where field.type == "date" && store.enabledCreationIDs.contains(field.id) && store.todayCreationIDs.contains(field.id) {
-                                    var value = CreationValue()
-                                    value.date = CreationValue.dayFormatter.string(from: Date())
-                                    defaults[field.id] = value
-                                }
-                                await store.create(title: newTask.title, projectID: newTask.projectID ?? "", values: defaults)
-                            }
-                        } label: {
-                            choice("0", title: newTask.title, detail: "Create & start · \(projectName(newTask.projectID))")
+                        Button { createNewTask(newTask) } label: {
+                            choice("↵", title: newTask.title, detail: "Create & start · \(projectName(newTask.projectID))")
                         }.buttonStyle(.plain)
-                            .choiceShortcut("0", enabled: !editing)
+                            .defaultActionShortcut(enabled: !editing)
+                            .help("Press Enter or 0 to create and start")
+                            .background {
+                                Button { createNewTask(newTask) } label: { EmptyView() }
+                                    .choiceShortcut("0", enabled: !editing)
+                                    .hidden().accessibilityHidden(true)
+                            }
                         Button("Edit new task details") { edit(newTask) }
                             .buttonStyle(.plain).font(.custom("Inter", size: 11)).foregroundStyle(.secondary)
                         if !proposal.explanation.isEmpty {
@@ -80,6 +77,19 @@ struct SearchChoicesView: View {
             }
         }
         .task(id: request?.id) { await runSearch() }
+    }
+
+    private func createNewTask(_ proposal: AIProposal) {
+        guard ready, !store.busy, store.persistenceOK else { return }
+        Task {
+            var defaults: [String: CreationValue] = [:]
+            for field in store.creationFields where field.type == "date" && store.enabledCreationIDs.contains(field.id) && store.todayCreationIDs.contains(field.id) {
+                var value = CreationValue()
+                value.date = CreationValue.dayFormatter.string(from: Date())
+                defaults[field.id] = value
+            }
+            await store.create(title: proposal.title, projectID: proposal.projectID ?? "", values: defaults)
+        }
     }
 
     private func choice(_ key: String, title: String, detail: String, task: WorkTask? = nil) -> some View {
@@ -134,6 +144,10 @@ struct SearchChoicesView: View {
 }
 
 private extension View {
+    @ViewBuilder func defaultActionShortcut(enabled: Bool) -> some View {
+        if enabled { keyboardShortcut(.defaultAction) } else { self }
+    }
+
     @ViewBuilder func choiceShortcut(_ key: KeyEquivalent, enabled: Bool) -> some View {
         if enabled { keyboardShortcut(key, modifiers: []) } else { self }
     }

@@ -89,7 +89,7 @@ struct IslandView: View {
         .onExitCommand { speech.stop(); hide() }
     }
     func submitSearch() {
-        guard !searching, !store.busy, !store.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        guard !searching, !store.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         speech.stop()
         focused = false
         searchRequest = SearchRequest(query: store.query)
