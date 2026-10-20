@@ -9,9 +9,15 @@ public struct SessionDate: Codable, Equatable {
         formatter.timeZone = calendar.timeZone; formatter.dateFormat = "yyyy-MM-dd"
         return Self(start: formatter.string(from: date), end: nil)
     }
-    public static func range(start: Date, end: Date) -> Self {
+    public static func timestamp(_ date: Date, timeZone: TimeZone = .current) -> String {
         let formatter = ISO8601DateFormatter()
-        return Self(start: formatter.string(from: start), end: formatter.string(from: end))
+        // Preserve the local clock and its date-specific offset in Notion's editor.
+        // UTC Z timestamps represent the right instant but select UTC for editing.
+        formatter.timeZone = timeZone
+        return formatter.string(from: date)
+    }
+    public static func range(start: Date, end: Date, timeZone: TimeZone = .current) -> Self {
+        Self(start: timestamp(start, timeZone: timeZone), end: timestamp(end, timeZone: timeZone))
     }
     public var payload: [String: Any] { ["start": start, "end": end as Any? ?? NSNull(), "time_zone": NSNull()] }
 }
@@ -73,7 +79,7 @@ public extension PendingUpdate {
     var properties: [String: Any] {
         let s = settings
         var result: [String: Any] = [s.statusProperty: [s.statusType: ["name": status]]]
-        if let start, !s.startProperty.isEmpty { result[s.startProperty] = ["date": ["start": ISO8601DateFormatter().string(from: start)]] }
+        if let start, !s.startProperty.isEmpty { result[s.startProperty] = ["date": ["start": SessionDate.timestamp(start)]] }
         if let dateValue, let field = s.sessionDateProperty, !field.isEmpty { result[field] = ["date": dateValue.payload] }
         if let projectID, !s.projectProperty.isEmpty { result[s.projectProperty] = ["relation": projectID.isEmpty ? [] : [["id": projectID]]] }
         return result

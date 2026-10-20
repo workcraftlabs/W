@@ -71,7 +71,19 @@ enum SessionTimingChecks {
         check(finished.scheduledStart == boundary && finished.scheduledEnd == boundary.addingTimeInterval(300) && finished.accumulated == 240, "Done preserves start and exact tracked time while rounding Notion end")
         let completion = PendingUpdate(pageID: "task", status: settings.done, settings: settings, dateValue: finished.sessionDate)
         let completionDate = (completion.properties["Due"] as? [String: Any])?["date"] as? [String: Any]
-        check(completionDate?["end"] as? String == ISO8601DateFormatter().string(from: boundary.addingTimeInterval(300)) && completion.properties["Status"] != nil, "Done status and rounded end share one Notion update")
+        check(completionDate?["end"] as? String == SessionDate.timestamp(boundary.addingTimeInterval(300)) && completion.properties["Status"] != nil, "Done status and rounded end share one Notion update")
+        let eastern = TimeZone(identifier: "America/New_York")!
+        let summer = SessionDate.range(start: rounded, end: rounded.addingTimeInterval(1500), timeZone: eastern)
+        check(summer.start == "2026-10-20T06:40:00-04:00" && summer.end == "2026-10-20T07:05:00-04:00", "Notion range retains Eastern daylight clock times")
+        let winter = calendar.date(from: DateComponents(year: 2026, month: 12, day: 20, hour: 6, minute: 40))!
+        check(SessionDate.timestamp(winter, timeZone: eastern) == "2026-12-20T06:40:00-05:00", "Eastern winter timestamps use standard time automatically")
+        check(ISO8601DateFormatter().date(from: summer.start) == rounded, "Local offset timestamp preserves the original instant")
+        let beforeDST = ISO8601DateFormatter().date(from: "2026-03-08T06:55:00Z")!
+        let crossing = SessionDate.range(start: beforeDST, end: beforeDST.addingTimeInterval(600), timeZone: eastern)
+        check(crossing.start == "2026-03-08T01:55:00-05:00" && crossing.end == "2026-03-08T03:05:00-04:00", "Each range endpoint gets its own offset across daylight saving")
+        let encoded = try JSONEncoder().encode(summer)
+        check(try JSONDecoder().decode(SessionDate.self, from: encoded) == summer, "Offline queue preserves explicit time offsets")
+        check(summer.payload["time_zone"] is NSNull, "Offset timestamps do not also send a named Notion time zone")
         return count
     }
 }
