@@ -138,11 +138,17 @@ import UserNotifications
     }
     func stop(done: Bool) {
         guard var session = state.active else { return }
-        session.stop(done: done); state.sessions.insert(session, at: 0); state.active = nil; checkIn = false; compact = false
+        let completedAt = Date()
+        session.stop(done: done, at: completedAt)
+        if done { session.recordCompletion(at: completedAt) }
+        state.sessions.insert(session, at: 0); state.active = nil; checkIn = false; compact = false
         let settings = session.notionSettings ?? state.settings
         if done {
-            if let index = state.tasks.firstIndex(where: { $0.id == session.task.id }) { state.tasks[index].done = true; state.tasks[index].status = state.settings.done }
-            if session.task.remote { state.pending.append(PendingUpdate(pageID: session.task.id, status: settings.done, settings: settings)) }
+            if let index = state.tasks.firstIndex(where: { $0.id == session.task.id }) { state.tasks[index].done = true; state.tasks[index].status = settings.done }
+            if session.task.remote {
+                state.pending.append(PendingUpdate(pageID: session.task.id, status: settings.done, settings: settings, dateValue: session.sessionDate))
+                if let date = session.sessionDate { updateCachedDate(taskID: session.task.id, date: date, settings: settings) }
+            }
         }
         if !done, session.task.remote {
             let date = SessionDate.today()

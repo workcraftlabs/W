@@ -57,6 +57,21 @@ enum SessionTimingChecks {
         check(discovered.suggested.sessionDateProperty == "Due", "Session date defaults to Due when available")
         var explicit = NotionSettings(); explicit.sessionDateProperty = "Date"
         check(try NotionSchema(properties: taskSchema, settings: explicit).suggested.sessionDateProperty == "Date", "Explicit Date selection is preserved")
+        let boundary = calendar.date(from: DateComponents(year: 2026, month: 10, day: 20, hour: 6, minute: 40))!
+        check(SessionTiming.roundedEnd(boundary.addingTimeInterval(149), calendar: calendar) == boundary, "Completion before halfway rounds down")
+        check(SessionTiming.roundedEnd(boundary.addingTimeInterval(150), calendar: calendar) == boundary.addingTimeInterval(300), "Completion at halfway rounds forward")
+        check(SessionTiming.roundedEnd(boundary.addingTimeInterval(240), calendar: calendar) == boundary.addingTimeInterval(300), "6:44 completion rounds to 6:45")
+        check(SessionTiming.roundedEnd(boundary, calendar: calendar) == boundary, "Exact completion boundary stays unchanged")
+        let late = calendar.date(from: DateComponents(year: 2026, month: 10, day: 20, hour: 23, minute: 59))!
+        check(SessionDate.today(at: SessionTiming.roundedEnd(late, calendar: calendar), calendar: calendar).start == "2026-10-21", "Completion rounds across midnight")
+        var finished = WorkSession(task: WorkTask(title: "Finish"), now: boundary)
+        finished.configure(minutes: 25, settings: settings, calendar: calendar)
+        finished.stop(done: true, at: boundary.addingTimeInterval(240))
+        finished.recordCompletion(at: boundary.addingTimeInterval(240), calendar: calendar)
+        check(finished.scheduledStart == boundary && finished.scheduledEnd == boundary.addingTimeInterval(300) && finished.accumulated == 240, "Done preserves start and exact tracked time while rounding Notion end")
+        let completion = PendingUpdate(pageID: "task", status: settings.done, settings: settings, dateValue: finished.sessionDate)
+        let completionDate = (completion.properties["Due"] as? [String: Any])?["date"] as? [String: Any]
+        check(completionDate?["end"] as? String == ISO8601DateFormatter().string(from: boundary.addingTimeInterval(300)) && completion.properties["Status"] != nil, "Done status and rounded end share one Notion update")
         return count
     }
 }

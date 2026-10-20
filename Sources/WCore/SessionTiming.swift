@@ -23,6 +23,12 @@ public enum SessionTiming {
         if let field = settings.sessionDateProperty, !field.isEmpty { properties[field] = ["date": SessionDate.today(at: now).payload] }
         return properties
     }
+    /// Nearest five-minute mark; exact halfway points round forward.
+    public static func roundedEnd(_ date: Date, calendar: Calendar = .current) -> Date {
+        let lower = roundedStart(date, calendar: calendar)
+        let upper = calendar.date(byAdding: .minute, value: 5, to: lower) ?? lower.addingTimeInterval(300)
+        return date.timeIntervalSince(lower) < upper.timeIntervalSince(date) ? lower : upper
+    }
     public static func roundedStart(_ date: Date, calendar: Calendar = .current) -> Date {
         let minute = calendar.component(.minute, from: date)
         let minuteStart = calendar.dateInterval(of: .minute, for: date)?.start ?? date
@@ -51,6 +57,11 @@ public extension WorkSession {
         scheduledEnd = max(scheduledEnd ?? now, now).addingTimeInterval(Double(minutes * 60))
         awaitingDecision = false
         resume(at: now)
+    }
+    mutating func recordCompletion(at now: Date, calendar: Calendar = .current) {
+        let start = scheduledStart ?? SessionTiming.roundedStart(startedAt, calendar: calendar)
+        scheduledStart = start
+        scheduledEnd = max(start, SessionTiming.roundedEnd(now, calendar: calendar))
     }
     var sessionDate: SessionDate? {
         guard let start = scheduledStart, let end = scheduledEnd else { return nil }
